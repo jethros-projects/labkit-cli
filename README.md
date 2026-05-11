@@ -115,7 +115,7 @@ labkit claude-code info auto-memory
 labkit claude-code list --all --json
 ```
 
-For Codex, `info` combines the live registry with `lab_kit/data/codex_feature_metadata.json`, including known upstream dependencies such as `enable_fanout` implying `multi_agent` and `code_mode_only` implying `code_mode`. For the `1m-context` control, `verify --strict` checks the config layer, local model catalog, Codex binary model view, and recent session logs.
+For Codex, `info` combines the live registry with `lab_kit/data/codex_feature_metadata.json`, including known upstream dependencies such as `enable_fanout` implying `multi_agent` and `code_mode_only` implying `code_mode`. The old `1m-context` catalog patch is now hidden from the recommended view and non-selectable: OpenAI documents GPT-5.5 in Codex as a 400K-context surface, while API GPT-5.5 is the documented 1M surface. `verify --strict` can still inspect existing overrides and recent session logs, and `labkit codex disable 1m-context` removes the old Lab Kit override.
 
 For Claude Code, `info` combines curated metadata, SchemaStore keys, and settings-file discoveries. Lab Kit records where verification stops: it can prove the file value, but account entitlement, provider IAM, managed policy precedence, and live context/model behavior require Claude Code runtime checks such as `/status`, `/context`, `/memory`, `/hooks`, `/mcp`, `/permissions`, or `/model`.
 
@@ -181,7 +181,7 @@ JSON mode disables color and progress output. Runtime errors are emitted as JSON
 Codex:
 
 - `~/.codex/config.toml`
-- local model-catalog override used for the `1m-context` control
+- optional local model-catalog override cleanup for old `1m-context` installs
 - recent Codex session logs for runtime verification
 - `~/.local/share/labkit/codex-features.json` for optional registry cache
 
