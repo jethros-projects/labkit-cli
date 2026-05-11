@@ -22,7 +22,6 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from importlib import metadata as importlib_metadata
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -486,10 +485,7 @@ FEATURE_BY_NAME = {feature.name: feature for feature in CURATED_FEATURES}
 
 
 def package_version() -> str:
-    try:
-        return importlib_metadata.version("labkit-cli")
-    except importlib_metadata.PackageNotFoundError:
-        return __version__
+    return __version__
 
 
 def package_json(filename: str) -> dict[str, Any]:

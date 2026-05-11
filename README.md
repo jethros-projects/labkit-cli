@@ -4,6 +4,8 @@
 
 Power up Codex CLI and Claude Code with Lab Kit CLI.
 
+Current version: 0.3.0.
+
 Lab Kit CLI is for people who use coding agents every day and want easier access to the experimental, preview, and locally gated controls already present in their installed tools. Instead of digging through config files or guessing environment variables, run one command, review the available controls, and choose what should be active.
 
 It supports Codex CLI and Claude Code. It backs up files before editing. It does not auto-enable anything, and it cannot grant account access, paid-plan access, model access, or server-side rollouts.
