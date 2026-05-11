@@ -22,7 +22,6 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from importlib import metadata as importlib_metadata
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -486,10 +485,7 @@ FEATURE_BY_NAME = {feature.name: feature for feature in CURATED_FEATURES}
 
 
 def package_version() -> str:
-    try:
-        return importlib_metadata.version("labkit-cli")
-    except importlib_metadata.PackageNotFoundError:
-        return __version__
+    return __version__
 
 
 def package_json(filename: str) -> dict[str, Any]:
@@ -772,6 +768,18 @@ def claude_manual(name: str, title: str, cluster: str, description: str) -> Feat
     )
 
 
+def claude_reference(name: str, title: str, cluster: str, stage: str, description: str) -> Feature:
+    return Feature(
+        name,
+        title,
+        cluster,
+        stage,
+        "manual",
+        description,
+        selectable=False,
+    )
+
+
 CLAUDE_FEATURES: list[Feature] = [
     claude_setting(
         "auto-memory",
@@ -1017,6 +1025,16 @@ CLAUDE_FEATURES: list[Feature] = [
         "Makes non-interactive sessions wait for plugin installation before the first query so plugin tools are available immediately.",
         "CLAUDE_CODE_SYNC_PLUGIN_INSTALL",
     ),
+    claude_setting(
+        "agent-view",
+        "Agent View",
+        "Agent Runtime",
+        "Keeps the research-preview background agent view and background session supervisor available.",
+        "disableAgentView",
+        value=False,
+        inactive_value=True,
+        default_enabled=True,
+    ),
     claude_env(
         "auto-background-tasks",
         "Auto Background Tasks",
@@ -1123,6 +1141,17 @@ CLAUDE_FEATURES: list[Feature] = [
         "Allows sandboxed bash commands to run without extra approval when Claude Code considers the sandbox active and effective.",
         "sandbox.autoAllowBashIfSandboxed",
         default_enabled=True,
+    ),
+    claude_setting(
+        "auto-permissions",
+        "Auto Permission Mode",
+        "Safety",
+        "Starts Claude Code in auto permission mode, where low-risk tool calls can be approved with background safety checks.",
+        "permissions.defaultMode",
+        value="auto",
+        inactive_value="default",
+        default_enabled=False,
+        kind="claude_value",
     ),
     claude_env(
         "perforce-mode",
@@ -1286,6 +1315,14 @@ CLAUDE_FEATURES: list[Feature] = [
         default_enabled=True,
     ),
     claude_setting(
+        "channels",
+        "MCP Channels",
+        "Tools & Integrations",
+        "Enables research-preview MCP channel notifications from approved plugins or servers.",
+        "channelsEnabled",
+        default_enabled=False,
+    ),
+    claude_setting(
         "away-summary",
         "Away Summary",
         "Session UX",
@@ -1387,6 +1424,25 @@ CLAUDE_FEATURES: list[Feature] = [
         value="true",
         inactive_value="false",
         default_enabled=True,
+    ),
+    claude_setting(
+        "voice-dictation",
+        "Voice Dictation",
+        "Session UX",
+        "Enables the Claude Code voice dictation UI for prompts when the local machine, account, and provider route support it.",
+        "voice.enabled",
+        default_enabled=False,
+    ),
+    claude_setting(
+        "voice-tap-mode",
+        "Voice Tap Mode",
+        "Session UX",
+        "Uses tap-to-record voice dictation instead of hold-to-record when voice dictation is enabled.",
+        "voice.mode",
+        value="tap",
+        inactive_value="hold",
+        default_enabled=False,
+        kind="claude_value",
     ),
     claude_setting(
         "clear-context-on-plan",
@@ -1682,6 +1738,146 @@ CLAUDE_FEATURES: list[Feature] = [
         "Worktree Session",
         "Session Flags",
         "Session-only feature: start Claude Code with `claude --worktree <name>` to isolate work in a generated git worktree.",
+    ),
+    claude_reference(
+        "ultraplan",
+        "Ultraplan",
+        "Session Commands",
+        "research-preview",
+        "Command-only feature: run `/ultraplan <prompt>` to draft a plan in Claude Code on the web, then execute remotely or send it back to the terminal.",
+    ),
+    claude_reference(
+        "ultrareview",
+        "Ultrareview",
+        "Session Commands",
+        "research-preview",
+        "Command-only feature: run `/ultrareview [PR]` or `claude ultrareview` for a deeper cloud review with multiple reviewer agents.",
+    ),
+    claude_reference(
+        "autofix-pr",
+        "Autofix PR",
+        "Session Commands",
+        "cloud-command",
+        "Command-only feature: run `/autofix-pr` to start a Claude Code on the web session that watches a pull request and pushes fixes.",
+    ),
+    claude_reference(
+        "background-session",
+        "Background Session",
+        "Session Commands",
+        "research-preview",
+        "Command-only feature: run `/background`, `/bg`, or `claude --bg <prompt>` to detach a session into Agent View.",
+    ),
+    claude_reference(
+        "side-question",
+        "Side Question",
+        "Session Commands",
+        "command",
+        "Command-only feature: run `/btw <question>` to ask an aside without adding it to the main conversation context.",
+    ),
+    claude_reference(
+        "context-visualizer",
+        "Context Visualizer",
+        "Session Commands",
+        "command",
+        "Command-only feature: run `/context` to inspect current context-window usage and optimization suggestions.",
+    ),
+    claude_reference(
+        "development-channels",
+        "Development Channels",
+        "Session Commands",
+        "dangerous-session-flag",
+        "Session-only flag: `--dangerously-load-development-channels` loads channel sources outside the approved allowlist for local development.",
+    ),
+    claude_reference(
+        "removed-auto-mode-flag",
+        "Removed Auto Mode Flag",
+        "Leaked / Internal",
+        "removed",
+        "Historical flag: `--enable-auto-mode` was removed; use `--permission-mode auto` or the Auto Permission Mode setting instead.",
+    ),
+    claude_reference(
+        "kairos",
+        "KAIROS",
+        "Leaked / Internal",
+        "leak-reported",
+        "Leak-reported persistent assistant/daemon architecture. LabKit tracks it for awareness only because no supported public setting or command enables it.",
+    ),
+    claude_reference(
+        "auto-dream",
+        "Auto-Dream",
+        "Leaked / Internal",
+        "leak-reported",
+        "Leak-reported KAIROS memory-consolidation cycle. It is not a supported public Claude Code control.",
+    ),
+    claude_reference(
+        "coordinator-mode",
+        "Coordinator Mode",
+        "Leaked / Internal",
+        "leak-reported",
+        "Leak-reported multi-agent orchestration mode. Use the official Agent Teams control instead of community-reported coordinator toggles.",
+    ),
+    claude_reference(
+        "buddy",
+        "Buddy",
+        "Leaked / Internal",
+        "leak-reported",
+        "Leak-reported terminal companion/pet experiment. It has no supported public enablement path.",
+    ),
+    claude_reference(
+        "dream-command",
+        "Dream Command",
+        "Leaked / Internal",
+        "leak-reported",
+        "Leak-reported `/dream` command for manual KAIROS memory consolidation. It is not listed in current official command docs.",
+    ),
+    claude_reference(
+        "pr-subscriptions",
+        "PR Subscriptions",
+        "Leaked / Internal",
+        "leak-reported",
+        "Leak-reported KAIROS pull-request subscription tooling. Use official `/autofix-pr`, Code Review, routines, or channels for supported workflows.",
+    ),
+    claude_reference(
+        "bughunter",
+        "Bug Hunter",
+        "Leaked / Internal",
+        "leak-reported",
+        "Leak-reported automated bug-hunting command. Use official `/review`, `/security-review`, or `/ultrareview` for supported review flows.",
+    ),
+    claude_reference(
+        "undercover-mode",
+        "Undercover Mode",
+        "Leaked / Internal",
+        "leak-reported",
+        "Leak-reported internal mode for hiding Anthropic or AI-authorship signals. LabKit intentionally keeps this reference-only.",
+    ),
+    claude_reference(
+        "anti-distillation",
+        "Anti-Distillation",
+        "Leaked / Internal",
+        "leak-reported",
+        "Leak-reported server-side competitive-defense mechanism involving fake tool injection. It is not a user-facing feature flag.",
+    ),
+    claude_reference(
+        "internal-ant-user-type",
+        "Internal Anthropic User Type",
+        "Leaked / Internal",
+        "unsupported",
+        "Leak-reported `USER_TYPE=ant` internal-employee path. Public reports say setting it yourself is unlikely to work and may be server-side validated.",
+    ),
+    claude_reference(
+        "ablation-baseline",
+        "Ablation Baseline",
+        "Leaked / Internal",
+        "unsafe-internal",
+        "Leak-reported safety-ablation switch. LabKit will not write it because it is internal testing infrastructure and unsafe for normal use.",
+    ),
+    claude_reference(
+        "command-injection-check-bypass",
+        "Command Injection Check Bypass",
+        "Leaked / Internal",
+        "unsafe-internal",
+        "Leak-reported internal testing switch for disabling command-injection checks. LabKit will not write it.",
     ),
 ]
 
@@ -2047,9 +2243,20 @@ def settings_only_features(settings: dict[str, Any], known_features: list[Featur
     return features
 
 
+def claude_default_hidden() -> set[str]:
+    metadata = load_claude_metadata()
+    hidden = metadata.get("default_hidden", [])
+    return {str(name) for name in hidden} if isinstance(hidden, list) else set()
+
+
+def visible_claude_features(features: list[Feature]) -> list[Feature]:
+    hidden = claude_default_hidden()
+    return [feature for feature in features if feature.name not in hidden]
+
+
 def claude_features(settings: dict[str, Any] | None = None, *, include_all: bool = False) -> list[Feature]:
     if not include_all:
-        return CLAUDE_FEATURES
+        return visible_claude_features(CLAUDE_FEATURES)
     schema, _source = load_claude_schema()
     features = [*CLAUDE_FEATURES, *schema_features(schema, CLAUDE_FEATURES)]
     if settings is not None:
@@ -2616,6 +2823,7 @@ def render_feature_details(feature: Feature, indent: str = "        ") -> None:
     render_metadata_items("Dependencies", feature.dependencies, indent=indent)
     render_metadata_items("Limitations", feature.limitations, indent=indent)
     render_metadata_items("Verification", feature.verification, indent=indent)
+    render_metadata_items("Sources", feature.sources, indent=indent)
 
 
 def render_feature(feature: Feature, state: str, source: str, number: int | None = None, details: bool = False) -> None:
@@ -3774,7 +3982,7 @@ def cmd_claude_code_check(args: argparse.Namespace) -> None:
     settings = read_json_file(paths.settings)
     report = inspect_claude_binary(preferred_claude_bin(args.claude_bin))
     state_getter = lambda feature: claude_feature_state(feature, settings)
-    features = feature_catalog_data_for(CLAUDE_FEATURES, state_getter)
+    features = feature_catalog_data_for(claude_features(settings, include_all=False), state_getter)
     ok = bool(report["ok"])
     if JSON_OUTPUT:
         emit_json(

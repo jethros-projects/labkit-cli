@@ -131,6 +131,28 @@
       ]
     }
   },
+  "default_hidden": [
+    "ultraplan",
+    "ultrareview",
+    "autofix-pr",
+    "background-session",
+    "side-question",
+    "context-visualizer",
+    "development-channels",
+    "removed-auto-mode-flag",
+    "kairos",
+    "auto-dream",
+    "coordinator-mode",
+    "buddy",
+    "dream-command",
+    "pr-subscriptions",
+    "bughunter",
+    "undercover-mode",
+    "anti-distillation",
+    "internal-ant-user-type",
+    "ablation-baseline",
+    "command-injection-check-bypass"
+  ],
   "clusters": {
     "Memory & Context": {
       "sources": [
@@ -222,6 +244,32 @@
         }
       ]
     },
+    "Agent Runtime": {
+      "sources": [
+        {
+          "label": "Claude Code agent teams",
+          "url": "https://code.claude.com/docs/en/agent-teams",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Claude Code agent view",
+          "url": "https://code.claude.com/docs/en/agent-view",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Claude Code subagents",
+          "url": "https://code.claude.com/docs/en/sub-agents",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Parallelism costs real quota",
+          "detail": "Agent teams, background sessions, and forked subagents can multiply token usage, local processes, and file-conflict risk."
+        }
+      ]
+    },
     "IDE": {
       "sources": [
         {
@@ -270,6 +318,61 @@
           "severity": "info",
           "label": "Not persistent",
           "detail": "These modes are chosen when launching Claude Code and are not durable settings."
+        }
+      ]
+    },
+    "Session Commands": {
+      "sources": [
+        {
+          "label": "Claude Code commands",
+          "url": "https://code.claude.com/docs/en/commands",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "info",
+          "label": "Command-only",
+          "detail": "These controls document runtime commands. LabKit does not execute them because they are interactive or account-billed workflows."
+        }
+      ]
+    },
+    "Leaked / Internal": {
+      "sources": [
+        {
+          "label": "Techsy Claude Code leak analysis",
+          "url": "https://techsy.io/en/blog/claude-code-leaked-features-2026",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "AY Automate Claude Code leak analysis",
+          "url": "https://www.ayautomate.com/blog/claude-code-source-code-leaked-github-2026",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Claude Lab source-map analysis",
+          "url": "https://claudelab.net/en/articles/claude-code/claude-code-sourcemap-kairos-internal-architecture",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Reference-only leak intelligence",
+          "detail": "These entries come from public leak analysis rather than supported Anthropic docs. LabKit intentionally will not write unofficial, internal, or unsafe toggles."
+        },
+        {
+          "severity": "warn",
+          "label": "May be build-gated or server-gated",
+          "detail": "A string found in a leaked source map does not prove that a public Claude Code build contains, exposes, or honors the behavior."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Official availability check",
+          "detail": "Use current official docs, `claude --version`, `/help`, `/status`, and the command list in a fresh Claude Code session before assuming any leaked feature works.",
+          "automated": false
         }
       ]
     }
@@ -387,6 +490,496 @@
           "label": "Claude Code Microsoft Foundry",
           "url": "https://code.claude.com/docs/en/microsoft-foundry",
           "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "agent-view": {
+      "dependencies": [
+        {
+          "kind": "version",
+          "label": "Claude Code v2.1.139+",
+          "detail": "Official docs describe Agent View as a research preview requiring Claude Code v2.1.139 or later."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Local supervisor",
+          "detail": "Background sessions run on your machine and stop when the machine sleeps or shuts down; each active session consumes normal account quota."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Agent view",
+          "detail": "Run `claude agents` or start a harmless `claude --bg` task in a fresh session.",
+          "automated": false
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code agent view",
+          "url": "https://code.claude.com/docs/en/agent-view",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Agent view launch post",
+          "url": "https://claude.com/blog/agent-view-in-claude-code",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "voice-dictation": {
+      "dependencies": [
+        {
+          "kind": "version",
+          "label": "Claude Code v2.1.69+",
+          "detail": "Official docs describe voice dictation as requiring v2.1.69 or later; tap mode requires v2.1.116 or later."
+        },
+        {
+          "kind": "account",
+          "label": "Claude.ai account and microphone",
+          "detail": "Voice dictation requires Claude.ai authentication, local microphone access, and a local terminal or supported IDE surface."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Audio leaves the machine",
+          "detail": "Official docs say recorded audio is streamed to Anthropic for transcription and is not processed locally."
+        },
+        {
+          "severity": "blocking",
+          "label": "Provider limitations",
+          "detail": "Voice dictation is not available with direct API-key-only usage, Bedrock, Vertex, Foundry, remote web sessions, or SSH-only environments."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Voice command",
+          "detail": "Start Claude Code locally and run `/voice`; the microphone check and prompt footer prove runtime availability.",
+          "automated": false
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code voice dictation",
+          "url": "https://code.claude.com/docs/en/voice-dictation",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "voice-tap-mode": {
+      "dependencies": [
+        {
+          "kind": "feature",
+          "label": "Voice dictation enabled",
+          "detail": "Tap mode only matters when voice dictation itself is enabled and available."
+        },
+        {
+          "kind": "version",
+          "label": "Claude Code v2.1.116+",
+          "detail": "Official docs describe tap mode as requiring Claude Code v2.1.116 or later."
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code voice dictation",
+          "url": "https://code.claude.com/docs/en/voice-dictation",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "ultraplan": {
+      "dependencies": [
+        {
+          "kind": "version",
+          "label": "Claude Code v2.1.91+",
+          "detail": "Official docs describe Ultraplan as a research preview requiring Claude Code v2.1.91 or later."
+        },
+        {
+          "kind": "account",
+          "label": "Claude Code on the web and GitHub",
+          "detail": "Ultraplan runs on Claude Code on the web infrastructure and requires a web account plus a GitHub repository/cloud environment."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Provider limitations",
+          "detail": "Ultraplan is not available on Bedrock, Vertex AI, or Microsoft Foundry routes."
+        },
+        {
+          "severity": "info",
+          "label": "Command only",
+          "detail": "Invoke with `/ultraplan <prompt>` or the `ultraplan` keyword; LabKit does not launch the cloud planning session."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Command availability",
+          "detail": "In a fresh Claude Code session, check `/help` or run `/ultraplan` with a harmless planning prompt.",
+          "automated": false
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code Ultraplan",
+          "url": "https://code.claude.com/docs/en/ultraplan",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "ultrareview": {
+      "dependencies": [
+        {
+          "kind": "version",
+          "label": "Claude Code v2.1.86+",
+          "detail": "Official docs describe Ultrareview as a research preview requiring Claude Code v2.1.86 or later."
+        },
+        {
+          "kind": "billing",
+          "label": "Extra usage",
+          "detail": "After any included free runs, Ultrareview requires extra usage billing and normally costs more than local review."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Provider and policy limitations",
+          "detail": "Ultrareview is not available on Bedrock, Vertex, Foundry, or organizations with Zero Data Retention enabled."
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code Ultrareview",
+          "url": "https://code.claude.com/docs/en/ultrareview",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "autofix-pr": {
+      "dependencies": [
+        {
+          "kind": "github",
+          "label": "GitHub and Claude Code on the web",
+          "detail": "The official command requires GitHub CLI access and Claude Code on the web access for the target pull request."
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code commands",
+          "url": "https://code.claude.com/docs/en/commands",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "background-session": {
+      "dependencies": [
+        {
+          "kind": "feature",
+          "label": "Agent View",
+          "detail": "Background sessions are managed by Agent View and the local per-user supervisor."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Local lifecycle",
+          "detail": "Background sessions run locally, can stop on sleep/shutdown, and can leave worktrees that need cleanup."
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code agent view",
+          "url": "https://code.claude.com/docs/en/agent-view",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "side-question": {
+      "sources": [
+        {
+          "label": "Claude Code commands",
+          "url": "https://code.claude.com/docs/en/commands",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "context-visualizer": {
+      "sources": [
+        {
+          "label": "Claude Code commands",
+          "url": "https://code.claude.com/docs/en/commands",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "agent-teams": {
+      "dependencies": [
+        {
+          "kind": "version",
+          "label": "Claude Code v2.1.32+",
+          "detail": "Official docs describe Agent Teams as requiring Claude Code v2.1.32 or later."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Experimental coordination",
+          "detail": "Official docs call Agent Teams experimental and note limitations around session resumption, task coordination, and shutdown behavior."
+        }
+      ]
+    },
+    "fork-subagents": {
+      "dependencies": [
+        {
+          "kind": "version",
+          "label": "Claude Code v2.1.117+",
+          "detail": "Official docs describe forked subagents as experimental and requiring Claude Code v2.1.117 or later."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Drops input isolation",
+          "detail": "Forked subagents inherit the full conversation context, unlike normal subagents that start with a smaller isolated prompt."
+        }
+      ]
+    },
+    "auto-permissions": {
+      "dependencies": [
+        {
+          "kind": "version",
+          "label": "Claude Code auto mode support",
+          "detail": "Use a current Claude Code build where `--permission-mode auto` and `permissions.defaultMode` are supported."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Research-preview safety model",
+          "detail": "Auto mode approves low-risk tool calls through background safety checks; it is not OS sandboxing and it may be disabled by managed policy."
+        },
+        {
+          "severity": "info",
+          "label": "Old flag removed",
+          "detail": "`--enable-auto-mode` was removed in favor of `--permission-mode auto`."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Permission mode",
+          "detail": "Start Claude Code and inspect `/permissions` or `/status` to confirm the active permission mode.",
+          "automated": false
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code CLI reference",
+          "url": "https://code.claude.com/docs/en/cli-reference",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Claude Code settings schema",
+          "url": "https://json.schemastore.org/claude-code-settings.json",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "channels": {
+      "dependencies": [
+        {
+          "kind": "account",
+          "label": "Claude.ai authentication",
+          "detail": "Official CLI docs describe `--channels` as requiring Claude.ai authentication."
+        },
+        {
+          "kind": "mcp",
+          "label": "Channel-capable MCP/plugin source",
+          "detail": "A plugin or MCP server must advertise a Claude channel capability and be allowed by policy."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Research preview",
+          "detail": "Channels are research-preview inbound notifications and may be restricted by managed allowlists."
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code CLI reference",
+          "url": "https://code.claude.com/docs/en/cli-reference",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Claude Code settings schema",
+          "url": "https://json.schemastore.org/claude-code-settings.json",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "development-channels": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Dangerous session flag",
+          "detail": "This bypasses the approved channel allowlist for development and prompts for confirmation. LabKit documents it but will not launch it."
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code CLI reference",
+          "url": "https://code.claude.com/docs/en/cli-reference",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "removed-auto-mode-flag": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Known removed",
+          "detail": "`--enable-auto-mode` is documented as removed in v2.1.111. Use `--permission-mode auto` or `permissions.defaultMode` instead."
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code CLI reference",
+          "url": "https://code.claude.com/docs/en/cli-reference",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "kairos": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "No public enable path",
+          "detail": "Public leak analyses describe KAIROS as feature-flagged or roadmap work, but current official docs do not expose a user setting, env var, or command for enabling it."
+        }
+      ]
+    },
+    "auto-dream": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Part of unreleased KAIROS",
+          "detail": "Official Auto Memory and Managed Agents dreaming exist, but leak-specific Claude Code Auto-Dream is not a supported public control and should not be confused with `autoMemoryEnabled`."
+        },
+        {
+          "severity": "info",
+          "label": "Managed Agents only",
+          "detail": "Anthropic's public dreaming preview is for Claude Managed Agents on the platform, not a local Claude Code setting."
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Managed Agents dreaming",
+          "url": "https://claude.com/blog/new-in-claude-managed-agents",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "coordinator-mode": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Unsupported leaked name",
+          "detail": "Community reports conflict on whether a coordinator env var ever worked; current official docs point to Agent Teams via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` instead."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Use official replacement",
+          "detail": "Enable `agent-teams` and verify with a fresh session instead of relying on leaked coordinator-mode names.",
+          "automated": false
+        }
+      ]
+    },
+    "buddy": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "No public enable path",
+          "detail": "Leak analyses describe Buddy as an experiment or teaser; current official docs do not expose it."
+        }
+      ]
+    },
+    "dream-command": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Not in official command docs",
+          "detail": "`/dream` is leak-reported and appears tied to unreleased KAIROS memory consolidation."
+        }
+      ]
+    },
+    "pr-subscriptions": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Use supported PR automation",
+          "detail": "Leak-reported PR subscription tools are not public; use `/autofix-pr`, Code Review, channels, routines, or GitHub Actions instead."
+        }
+      ]
+    },
+    "bughunter": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Use supported review commands",
+          "detail": "Leak-reported `/bughunter` is not public; use `/review`, `/security-review`, `/simplify`, or `/ultrareview` instead."
+        }
+      ]
+    },
+    "undercover-mode": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Internal and not user-facing",
+          "detail": "Leak analyses discuss this as an internal/controversial behavior, not a supported user feature. LabKit will not enable it."
+        }
+      ]
+    },
+    "anti-distillation": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Not user-facing",
+          "detail": "Leak analyses describe this as a server-side or internal competitive-defense mechanism, not a local feature flag users can rely on."
+        }
+      ]
+    },
+    "internal-ant-user-type": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Known unlikely to work",
+          "detail": "Public reports say `USER_TYPE=ant` is an internal employee path and likely requires server-side or build-time validation; setting it locally should not be treated as enabling hidden features."
+        }
+      ]
+    },
+    "ablation-baseline": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Unsafe internal testing",
+          "detail": "Leak analyses associate this with disabling safety behavior for experiments. LabKit intentionally refuses to write it."
+        }
+      ]
+    },
+    "command-injection-check-bypass": {
+      "limitations": [
+        {
+          "severity": "blocking",
+          "label": "Unsafe internal testing",
+          "detail": "Leak analyses associate this with disabling command-injection protections. LabKit intentionally refuses to write it."
         }
       ]
     }
