@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check .
+
+      - name: Black
+        run: black --check .
+
+      - name: Mypy
+        run: mypy lab_kit
+
+      - name: ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: "."
+          additional_files: "install.sh tests/run_e2e.sh"
+
+      - name: E2E
+        run: tests/run_e2e.sh
