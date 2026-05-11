@@ -71,5 +71,5 @@ ignore_missing_imports = true
 check_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = "lab_kit.cli"
+module = ["lab_kit.cli", "lab_kit.codex", "lab_kit.claude"]
 ignore_errors = true

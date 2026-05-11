@@ -13,20 +13,26 @@
           "checked_at": "2026-05-11"
         }
       ],
-      "verification": [
+      "verification": "config",
+      "limitations": [
+        {
+          "severity": "info",
+          "label": "Local evidence boundary",
+          "detail": "LabKit can verify local configuration and the installed Codex registry. It cannot guarantee account, rollout, hosted service, or model-runtime behavior without fresh runtime evidence."
+        }
+      ],
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "notes": "LabKit can confirm local configuration; runtime behavior may still be account or rollout gated.",
+      "tags": [],
+      "verification_steps": [
         {
           "kind": "local-state",
           "label": "LabKit state",
           "detail": "Use LabKit JSON output to confirm the intended config or registry state.",
           "command": "labkit codex list --all --json",
           "automated": true
-        }
-      ],
-      "limitations": [
-        {
-          "severity": "info",
-          "label": "Local evidence boundary",
-          "detail": "LabKit can verify local configuration and the installed Codex registry. It cannot guarantee account, rollout, hosted service, or model-runtime behavior without fresh runtime evidence."
         }
       ]
     },
@@ -51,7 +57,15 @@
           "detail": "A true flag can unlock a local code path, but it does not install missing plugins, connect accounts, override managed requirements, or bypass server-side entitlement checks."
         }
       ],
-      "verification": [
+      "verification": "config",
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": true,
+      "notes": "Registry flags can change with the installed Codex build; verify in a fresh session.",
+      "tags": [
+        "registry"
+      ],
+      "verification_steps": [
         {
           "kind": "registry",
           "label": "Registry visibility",
@@ -75,7 +89,13 @@
           "detail": "Codex must load the `~/.codex/config.toml` or trusted project config layer where this setting is written."
         }
       ],
-      "verification": [
+      "verification": "config",
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "notes": "LabKit can confirm local configuration; runtime behavior may still be account or rollout gated.",
+      "tags": [],
+      "verification_steps": [
         {
           "kind": "config",
           "label": "Config value",
@@ -105,7 +125,16 @@
           "detail": "This changes local Codex model metadata and config. It does not grant model access, change your plan, or prove the hosted model accepts the full requested window."
         }
       ],
-      "verification": [
+      "verification": "runtime",
+      "risk_level": "high",
+      "stability": "experimental",
+      "recommended": false,
+      "notes": "Unsupported local catalog patches need strict runtime proof and should stay reference-only.",
+      "tags": [
+        "unsupported",
+        "power-user"
+      ],
+      "verification_steps": [
         {
           "kind": "strict-runtime",
           "label": "Layered runtime proof",
@@ -141,7 +170,7 @@
     "1m-context": {
       "title": "Unsupported 1M Context Override",
       "cluster": "Model & Context",
-      "description": "Documents the old local GPT-5.5 1M catalog override. It is not a proven Codex feature and is hidden from the recommended flow.",
+      "description": "Documents the old local GPT-5.5 1M catalog override. It is not a proven Codex feature, so LabKit keeps it visible but marks it high risk and non-selectable.",
       "dependencies": [
         {
           "kind": "model",
@@ -176,15 +205,7 @@
           "detail": "LabKit can remove the old local catalog override with `labkit codex disable 1m-context`."
         }
       ],
-      "verification": [
-        {
-          "kind": "runtime",
-          "label": "Session evidence",
-          "detail": "Treat the override as unproven unless a fresh Codex session reports `model_context_window` near the expected effective window in session logs.",
-          "command": "labkit codex verify --strict",
-          "automated": true
-        }
-      ],
+      "verification": "runtime",
       "sources": [
         {
           "label": "Codex config reference",
@@ -211,6 +232,24 @@
           "url": "https://github.com/openai/codex/issues/16068",
           "checked_at": "2026-05-11"
         }
+      ],
+      "verification_steps": [
+        {
+          "kind": "runtime",
+          "label": "Session evidence",
+          "detail": "Treat the override as unproven unless a fresh Codex session reports `model_context_window` near the expected effective window in session logs.",
+          "command": "labkit codex verify --strict",
+          "automated": true
+        }
+      ],
+      "risk_level": "high",
+      "stability": "experimental",
+      "recommended": false,
+      "notes": "Unsupported local GPT-5.5 catalog override; visible for cleanup and audit, not recommended for enabling.",
+      "tags": [
+        "unsupported",
+        "power-user",
+        "context"
       ]
     },
     "web-search-live": {
@@ -231,7 +270,15 @@
           "detail": "OpenAI documents cached mode as reducing exposure to prompt injection from arbitrary live content; live results should still be treated as untrusted."
         }
       ],
-      "verification": [
+      "verification": "runtime",
+      "sources": [
+        {
+          "label": "Codex CLI web search",
+          "url": "https://developers.openai.com/codex/cli/features#web-search",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "verification_steps": [
         {
           "kind": "runtime",
           "label": "Transcript evidence",
@@ -239,64 +286,141 @@
           "automated": false
         }
       ],
-      "sources": [
-        {
-          "label": "Codex CLI web search",
-          "url": "https://developers.openai.com/codex/cli/features#web-search",
-          "checked_at": "2026-05-11"
-        }
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "notes": "Live search can expose the model to untrusted web content; treat results as untrusted.",
+      "tags": [
+        "network",
+        "prompt-injection"
       ]
     },
     "memories": {
       "title": "Memories",
       "cluster": "Memory & Personalization",
-      "description": "Enables the local memory switch when the current build exposes it."
+      "description": "Enables the local memory switch when the current build exposes it.",
+      "risk_level": "low",
+      "stability": "experimental",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Experimental memory behavior should be checked in a fresh session.",
+      "tags": [
+        "memory"
+      ]
     },
     "goals": {
       "title": "Goals",
       "cluster": "Workflow",
-      "description": "Tracks a concrete thread objective until the work is complete."
+      "description": "Tracks a concrete thread objective until the work is complete.",
+      "risk_level": "low",
+      "stability": "experimental",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Experimental workflow state; safe but still build-gated.",
+      "tags": [
+        "workflow"
+      ]
     },
     "codex_hooks": {
       "name": "codex-hooks",
-      "aliases": ["hooks"],
+      "aliases": [
+        "hooks"
+      ],
       "title": "Hooks",
       "cluster": "Workflow",
-      "description": "Runs local lifecycle hooks when the current build gates them."
+      "description": "Runs local lifecycle hooks when the current build gates them.",
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Hooks can run local lifecycle commands; inspect handlers before relying on them.",
+      "tags": [
+        "automation",
+        "shell"
+      ]
     },
     "external_migration": {
       "name": "external-migration",
       "title": "External Migration",
       "cluster": "Workflow",
-      "description": "Imports external agent session state where supported."
+      "description": "Imports external agent session state where supported.",
+      "risk_level": "medium",
+      "stability": "experimental",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Imports external session state; verify source trust before use.",
+      "tags": [
+        "migration",
+        "power-user"
+      ]
     },
     "prevent_idle_sleep": {
       "name": "prevent-idle-sleep",
       "title": "Prevent Idle Sleep",
       "cluster": "Runtime",
-      "description": "Prevents idle sleep during active work on supported macOS setups."
+      "description": "Prevents idle sleep during active work on supported macOS setups.",
+      "risk_level": "low",
+      "stability": "experimental",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Runtime convenience setting; verify macOS behavior locally.",
+      "tags": [
+        "runtime"
+      ]
     },
     "terminal_resize_reflow": {
       "name": "terminal-resize-reflow",
       "title": "Terminal Resize Reflow",
       "cluster": "Runtime",
-      "description": "Reflows terminal output more cleanly after width changes."
+      "description": "Reflows terminal output more cleanly after width changes.",
+      "risk_level": "low",
+      "stability": "experimental",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Terminal rendering behavior may vary by emulator.",
+      "tags": [
+        "runtime"
+      ]
     },
     "apps": {
       "title": "Connectors",
       "cluster": "Tools & Integrations",
-      "description": "Shows connector-backed tools and app integrations when available."
+      "description": "Shows connector-backed tools and app integrations when available.",
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Connector visibility still depends on installed connectors and auth.",
+      "tags": [
+        "connectors"
+      ]
     },
     "plugins": {
       "title": "Plugins",
       "cluster": "Tools & Integrations",
-      "description": "Lets installed plugin bundles contribute skills, tools, and integrations."
+      "description": "Lets installed plugin bundles contribute skills, tools, and integrations.",
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Plugin availability depends on installed plugin bundles.",
+      "tags": [
+        "plugins"
+      ]
     },
     "tool_suggest": {
       "name": "tool-suggest",
       "title": "Tool Suggest",
       "cluster": "Tools & Integrations",
-      "description": "Surfaces relevant tools or connectors when a task appears to need them."
+      "description": "Surfaces relevant tools or connectors when a task appears to need them.",
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Suggestion-only behavior; tool install/use still requires normal permission paths.",
+      "tags": [
+        "tools"
+      ]
     },
     "browser_use": {
       "name": "browser-use",
@@ -322,13 +446,22 @@
           "detail": "Enabling this flag can make the integration available; it does not prove every site, profile, auth, or browser action will work."
         }
       ],
-      "verification": [
+      "verification": "runtime",
+      "verification_steps": [
         {
           "kind": "manual-smoke",
           "label": "Browser smoke test",
           "detail": "Run a fresh Codex session and ask it to inspect a simple local or public page, then confirm a browser-use transcript/tool event appears.",
           "automated": false
         }
+      ],
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "notes": "Browser automation interacts with live pages; inspect actions and untrusted content carefully.",
+      "tags": [
+        "browser",
+        "tools"
       ]
     },
     "computer_use": {
@@ -355,13 +488,23 @@
           "detail": "The flag does not bypass Codex approval policy, OS accessibility permissions, or product availability gates."
         }
       ],
-      "verification": [
+      "verification": "runtime",
+      "verification_steps": [
         {
           "kind": "manual-smoke",
           "label": "Desktop smoke test",
           "detail": "Run a fresh Codex session and perform a harmless supported desktop action, then check transcript/tool evidence.",
           "automated": false
         }
+      ],
+      "risk_level": "high",
+      "stability": "stable",
+      "recommended": true,
+      "notes": "Desktop automation can interact with local apps under the normal permission model.",
+      "tags": [
+        "desktop",
+        "tools",
+        "power-user"
       ]
     },
     "multi_agent": {
@@ -369,55 +512,124 @@
       "title": "Multi-Agent",
       "cluster": "Agent Runtime",
       "description": "Lets a main agent delegate bounded work to helper agents.",
-      "verification": [
+      "verification": "runtime",
+      "verification_steps": [
         {
           "kind": "runtime",
           "label": "Delegation evidence",
           "detail": "A real proof requires a session that successfully starts and receives output from a helper agent.",
           "automated": false
         }
+      ],
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "notes": "Delegation can increase token use and coordination complexity.",
+      "tags": [
+        "agent-runtime",
+        "power-user"
       ]
     },
     "fast_mode": {
       "name": "fast-mode",
       "title": "Fast Mode",
       "cluster": "Agent Runtime",
-      "description": "Uses lower-latency routing where available."
+      "description": "Uses lower-latency routing where available.",
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Lower-latency routing can trade off depth for speed.",
+      "tags": [
+        "runtime"
+      ]
     },
     "personality": {
       "title": "Personality",
       "cluster": "Agent Runtime",
-      "description": "Enables interaction-style controls exposed by the current build."
+      "description": "Enables interaction-style controls exposed by the current build.",
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "config",
+      "notes": "Interaction-style control; safe to keep visible.",
+      "tags": [
+        "ux"
+      ]
     },
     "enable_request_compression": {
       "name": "request-compression",
       "title": "Request Compression",
       "cluster": "Agent Runtime",
-      "description": "Reduces payload size for larger and tool-heavy turns."
+      "description": "Reduces payload size for larger and tool-heavy turns.",
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Payload compression should be transparent but is build-gated.",
+      "tags": [
+        "runtime"
+      ]
     },
     "shell_snapshot": {
       "name": "shell-snapshot",
       "title": "Shell Snapshot",
       "cluster": "Agent Runtime",
-      "description": "Preserves more accurate terminal context across tool calls."
+      "description": "Preserves more accurate terminal context across tool calls.",
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Shell context capture can include terminal state; inspect privacy expectations.",
+      "tags": [
+        "shell",
+        "runtime"
+      ]
     },
     "shell_tool": {
       "name": "shell-tool",
       "title": "Shell Tool",
       "cluster": "Agent Runtime",
-      "description": "Keeps shell execution available when gated by a feature flag."
+      "description": "Keeps shell execution available when gated by a feature flag.",
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Shell execution remains subject to normal sandbox and approval policy.",
+      "tags": [
+        "shell",
+        "tools"
+      ]
     },
     "unified_exec": {
       "name": "unified-exec",
       "title": "Unified Exec",
       "cluster": "Agent Runtime",
-      "description": "Uses the newer command-execution path for terminal sessions."
+      "description": "Uses the newer command-execution path for terminal sessions.",
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Newer execution path; verify shell behavior in a fresh session.",
+      "tags": [
+        "shell",
+        "runtime"
+      ]
     },
     "remote_control": {
       "name": "remote-control",
       "title": "Remote Control",
       "cluster": "Workflow",
-      "description": "Exposes remote-control support when the installed Codex CLI build lists it."
+      "description": "Exposes remote-control support when the installed Codex CLI build lists it.",
+      "risk_level": "medium",
+      "stability": "experimental",
+      "recommended": false,
+      "verification": "runtime",
+      "notes": "Remote-control availability is account, build, and policy gated.",
+      "tags": [
+        "remote",
+        "power-user"
+      ]
     },
     "enable_fanout": {
       "name": "enable-fanout",
@@ -432,6 +644,15 @@
           "target": "multi_agent",
           "required_state": "enabled"
         }
+      ],
+      "risk_level": "medium",
+      "stability": "experimental",
+      "recommended": false,
+      "verification": "runtime",
+      "notes": "Fanout can multiply agent work and token use.",
+      "tags": [
+        "agent-runtime",
+        "power-user"
       ]
     },
     "code_mode_only": {
@@ -454,7 +675,16 @@
           "label": "Under development",
           "detail": "Upstream marks this feature under development in current source; do not treat it as production-stable."
         }
+      ],
+      "risk_level": "medium",
+      "stability": "experimental",
+      "recommended": false,
+      "verification": "runtime",
+      "notes": "Code-mode-only behavior can constrain the session surface.",
+      "tags": [
+        "power-user"
       ]
     }
-  }
+  },
+  "schema_version": 2
 }

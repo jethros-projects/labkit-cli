@@ -13,20 +13,26 @@
           "checked_at": "2026-05-11"
         }
       ],
-      "verification": [
+      "verification": "config",
+      "limitations": [
+        {
+          "severity": "info",
+          "label": "Settings evidence boundary",
+          "detail": "LabKit can verify local settings and schema/docs coverage. It cannot prove account entitlement, provider IAM, managed policy precedence, or live Claude Code runtime behavior without an active Claude Code session."
+        }
+      ],
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "notes": "Local settings can be confirmed from disk; use a fresh runtime session for live proof.",
+      "tags": [],
+      "verification_steps": [
         {
           "kind": "settings",
           "label": "Settings file",
           "detail": "Confirm the selected settings scope contains the value LabKit writes.",
           "command": "labkit claude-code list --all --json",
           "automated": true
-        }
-      ],
-      "limitations": [
-        {
-          "severity": "info",
-          "label": "Settings evidence boundary",
-          "detail": "LabKit can verify local settings and schema/docs coverage. It cannot prove account entitlement, provider IAM, managed policy precedence, or live Claude Code runtime behavior without an active Claude Code session."
         }
       ]
     },
@@ -43,7 +49,13 @@
           "detail": "Start a new Claude Code session after changing settings so the runtime reloads them."
         }
       ],
-      "verification": [
+      "verification": "config",
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "notes": "Local settings can be confirmed from disk; use a fresh runtime session for live proof.",
+      "tags": [],
+      "verification_steps": [
         {
           "kind": "runtime",
           "label": "Claude Code status",
@@ -60,7 +72,13 @@
           "detail": "Claude Code reads `settings.json` `env` values for Claude Code sessions. MCP child processes need per-server `env` configuration instead of relying on session env inheritance."
         }
       ],
-      "verification": [
+      "verification": "config",
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "notes": "Local settings can be confirmed from disk; use a fresh runtime session for live proof.",
+      "tags": [],
+      "verification_steps": [
         {
           "kind": "runtime",
           "label": "Effective environment",
@@ -88,6 +106,14 @@
           "label": "Schema shape, not semantics",
           "detail": "Schema presence proves key shape, not that your installed Claude Code build or account honors the behavior."
         }
+      ],
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": false,
+      "verification": "config",
+      "notes": "Schema presence proves shape, not that your installed build honors the behavior.",
+      "tags": [
+        "schema"
       ]
     },
     "settings-file": {
@@ -104,6 +130,14 @@
           "label": "Observed only",
           "detail": "LabKit can preserve and display this setting, but it does not claim docs or schema confirmation."
         }
+      ],
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "This key was observed locally but is not curated by LabKit.",
+      "tags": [
+        "observed"
       ]
     },
     "manual": {
@@ -121,7 +155,15 @@
           "detail": "LabKit intentionally does not enable or disable session-only controls."
         }
       ],
-      "verification": [
+      "verification": "manual",
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": false,
+      "notes": "Reference-only control; LabKit documents it but does not write settings for it.",
+      "tags": [
+        "reference-only"
+      ],
+      "verification_steps": [
         {
           "kind": "runtime",
           "label": "Launch proof",
@@ -131,28 +173,6 @@
       ]
     }
   },
-  "default_hidden": [
-    "ultraplan",
-    "ultrareview",
-    "autofix-pr",
-    "background-session",
-    "side-question",
-    "context-visualizer",
-    "development-channels",
-    "removed-auto-mode-flag",
-    "kairos",
-    "auto-dream",
-    "coordinator-mode",
-    "buddy",
-    "dream-command",
-    "pr-subscriptions",
-    "bughunter",
-    "undercover-mode",
-    "anti-distillation",
-    "internal-ant-user-type",
-    "ablation-baseline",
-    "command-injection-check-bypass"
-  ],
   "clusters": {
     "Memory & Context": {
       "sources": [
@@ -189,6 +209,15 @@
           "label": "Hook security",
           "detail": "Command hooks run with the user's full permissions. Async hooks cannot block tool calls or return decisions after the triggering action has already continued."
         }
+      ],
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Automation can run local commands or background work; inspect configured handlers before enabling.",
+      "tags": [
+        "automation",
+        "power-user"
       ]
     },
     "Safety": {
@@ -205,6 +234,14 @@
           "label": "Permission limits",
           "detail": "Read/Edit permission rules do not stop arbitrary subprocesses from reading or writing files. Use sandboxing or OS policy for shell-level isolation."
         }
+      ],
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Safety-related settings should be verified in a fresh session before relying on them.",
+      "tags": [
+        "safety"
       ]
     },
     "Connectivity": {
@@ -226,6 +263,15 @@
           "label": "Network and provider access",
           "detail": "Claude Code requires network access for model calls, and provider routes require their provider credentials and quotas."
         }
+      ],
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Provider and network controls can change routing, credentials, and traffic behavior.",
+      "tags": [
+        "network",
+        "provider"
       ]
     },
     "Tools & Integrations": {
@@ -268,6 +314,15 @@
           "label": "Parallelism costs real quota",
           "detail": "Agent teams, background sessions, and forked subagents can multiply token usage, local processes, and file-conflict risk."
         }
+      ],
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Agent runtime features can multiply work, quota use, and file-conflict risk.",
+      "tags": [
+        "agent-runtime",
+        "power-user"
       ]
     },
     "IDE": {
@@ -310,6 +365,14 @@
           "label": "Network observation needed",
           "detail": "Local settings can request telemetry or traffic behavior, but proving no packets were sent requires network-level observation."
         }
+      ],
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "manual",
+      "notes": "Privacy and diagnostic settings need runtime or network observation for strong proof.",
+      "tags": [
+        "privacy"
       ]
     },
     "Session Flags": {
@@ -319,6 +382,15 @@
           "label": "Not persistent",
           "detail": "These modes are chosen when launching Claude Code and are not durable settings."
         }
+      ],
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Command-only/session-only controls are visible but not written by LabKit.",
+      "tags": [
+        "command-only",
+        "reference-only"
       ]
     },
     "Session Commands": {
@@ -335,6 +407,15 @@
           "label": "Command-only",
           "detail": "These controls document runtime commands. LabKit does not execute them because they are interactive or account-billed workflows."
         }
+      ],
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Command-only/session-only controls are visible but not written by LabKit.",
+      "tags": [
+        "command-only",
+        "reference-only"
       ]
     },
     "Leaked / Internal": {
@@ -367,7 +448,17 @@
           "detail": "A string found in a leaked source map does not prove that a public Claude Code build contains, exposes, or honors the behavior."
         }
       ],
-      "verification": [
+      "verification": "manual",
+      "risk_level": "internal",
+      "stability": "internal",
+      "recommended": false,
+      "notes": "Public leak-analysis only. LabKit shows these entries for transparency and will not enable unsupported or unsafe toggles.",
+      "tags": [
+        "leaked",
+        "internal",
+        "reference-only"
+      ],
+      "verification_steps": [
         {
           "kind": "runtime",
           "label": "Official availability check",
@@ -393,13 +484,22 @@
           "detail": "LabKit cannot prove 1M context eligibility from settings alone; use `/context` or runtime session evidence inside Claude Code."
         }
       ],
-      "verification": [
+      "verification": "runtime",
+      "verification_steps": [
         {
           "kind": "runtime",
           "label": "Context command",
           "detail": "Start a fresh session and inspect `/context` or active model/context output.",
           "automated": false
         }
+      ],
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": true,
+      "notes": "Keeps 1M context visible when your account, model, provider route, and build support it; LabKit cannot prove entitlement offline.",
+      "tags": [
+        "context",
+        "power-user"
       ]
     },
     "auto-memory": {
@@ -417,23 +517,40 @@
           "detail": "Auto memory is machine-local and memory-file loading has size/line limits documented by Anthropic."
         }
       ],
-      "verification": [
+      "verification": "runtime",
+      "verification_steps": [
         {
           "kind": "runtime",
           "label": "Memory view",
           "detail": "Use `/memory` in Claude Code to inspect active memory sources.",
           "automated": false
         }
+      ],
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "notes": "Memory is local and useful, but inspect active memory sources when privacy matters.",
+      "tags": [
+        "memory"
       ]
     },
     "hooks": {
-      "verification": [
+      "verification": "runtime",
+      "verification_steps": [
         {
           "kind": "runtime",
           "label": "Hooks view",
           "detail": "Use `/hooks` to inspect configured hook events, matchers, source files, and handlers.",
           "automated": false
         }
+      ],
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "notes": "Hooks can execute local commands with your permissions; review handlers before trusting them.",
+      "tags": [
+        "automation",
+        "shell"
       ]
     },
     "tool-search": {
@@ -443,6 +560,14 @@
           "label": "Provider exceptions",
           "detail": "Official docs note MCP tool search is enabled by default with exceptions for Vertex and non-first-party ANTHROPIC_BASE_URL routes."
         }
+      ],
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Usually safe; provider routes can still gate availability.",
+      "tags": [
+        "mcp"
       ]
     },
     "bedrock": {
@@ -459,6 +584,15 @@
           "url": "https://code.claude.com/docs/en/amazon-bedrock",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Routes traffic and credentials through Amazon Bedrock; verify provider IAM and region configuration.",
+      "tags": [
+        "provider",
+        "network"
       ]
     },
     "vertex": {
@@ -475,6 +609,15 @@
           "url": "https://code.claude.com/docs/en/google-vertex-ai",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Routes traffic and credentials through Google Vertex AI; verify project and region configuration.",
+      "tags": [
+        "provider",
+        "network"
       ]
     },
     "foundry": {
@@ -491,6 +634,15 @@
           "url": "https://code.claude.com/docs/en/microsoft-foundry",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "medium",
+      "stability": "stable",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Routes traffic and credentials through Microsoft Foundry; verify Azure auth and resource configuration.",
+      "tags": [
+        "provider",
+        "network"
       ]
     },
     "agent-view": {
@@ -508,14 +660,7 @@
           "detail": "Background sessions run on your machine and stop when the machine sleeps or shuts down; each active session consumes normal account quota."
         }
       ],
-      "verification": [
-        {
-          "kind": "runtime",
-          "label": "Agent view",
-          "detail": "Run `claude agents` or start a harmless `claude --bg` task in a fresh session.",
-          "automated": false
-        }
-      ],
+      "verification": "runtime",
       "sources": [
         {
           "label": "Claude Code agent view",
@@ -527,6 +672,22 @@
           "url": "https://claude.com/blog/agent-view-in-claude-code",
           "checked_at": "2026-05-11"
         }
+      ],
+      "verification_steps": [
+        {
+          "kind": "runtime",
+          "label": "Agent view",
+          "detail": "Run `claude agents` or start a harmless `claude --bg` task in a fresh session.",
+          "automated": false
+        }
+      ],
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": true,
+      "notes": "Background sessions consume normal quota and depend on the local supervisor staying alive.",
+      "tags": [
+        "background",
+        "agent-runtime"
       ]
     },
     "voice-dictation": {
@@ -554,7 +715,15 @@
           "detail": "Voice dictation is not available with direct API-key-only usage, Bedrock, Vertex, Foundry, remote web sessions, or SSH-only environments."
         }
       ],
-      "verification": [
+      "verification": "runtime",
+      "sources": [
+        {
+          "label": "Claude Code voice dictation",
+          "url": "https://code.claude.com/docs/en/voice-dictation",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "verification_steps": [
         {
           "kind": "runtime",
           "label": "Voice command",
@@ -562,12 +731,13 @@
           "automated": false
         }
       ],
-      "sources": [
-        {
-          "label": "Claude Code voice dictation",
-          "url": "https://code.claude.com/docs/en/voice-dictation",
-          "checked_at": "2026-05-11"
-        }
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": true,
+      "notes": "Recorded audio is streamed for transcription and requires local microphone access.",
+      "tags": [
+        "audio",
+        "privacy"
       ]
     },
     "voice-tap-mode": {
@@ -589,6 +759,14 @@
           "url": "https://code.claude.com/docs/en/voice-dictation",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "low",
+      "stability": "beta",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Only changes voice dictation interaction style after voice is available.",
+      "tags": [
+        "audio"
       ]
     },
     "ultraplan": {
@@ -616,7 +794,15 @@
           "detail": "Invoke with `/ultraplan <prompt>` or the `ultraplan` keyword; LabKit does not launch the cloud planning session."
         }
       ],
-      "verification": [
+      "verification": "manual",
+      "sources": [
+        {
+          "label": "Claude Code Ultraplan",
+          "url": "https://code.claude.com/docs/en/ultraplan",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "verification_steps": [
         {
           "kind": "runtime",
           "label": "Command availability",
@@ -624,12 +810,14 @@
           "automated": false
         }
       ],
-      "sources": [
-        {
-          "label": "Claude Code Ultraplan",
-          "url": "https://code.claude.com/docs/en/ultraplan",
-          "checked_at": "2026-05-11"
-        }
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": false,
+      "notes": "Cloud planning workflow; visible by default but command-only and account/provider gated.",
+      "tags": [
+        "cloud",
+        "command-only",
+        "research-preview"
       ]
     },
     "ultrareview": {
@@ -658,6 +846,17 @@
           "url": "https://code.claude.com/docs/en/ultrareview",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "high",
+      "stability": "beta",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Cloud review can incur extra usage and is unavailable on some provider or policy routes.",
+      "tags": [
+        "cloud",
+        "billing",
+        "command-only",
+        "research-preview"
       ]
     },
     "autofix-pr": {
@@ -674,6 +873,17 @@
           "url": "https://code.claude.com/docs/en/commands",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "high",
+      "stability": "beta",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Cloud PR automation can push fixes; use only on repositories where that write path is acceptable.",
+      "tags": [
+        "cloud",
+        "github",
+        "write-capable",
+        "command-only"
       ]
     },
     "background-session": {
@@ -697,6 +907,15 @@
           "url": "https://code.claude.com/docs/en/agent-view",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Background sessions can continue consuming quota and leave local worktrees to clean up.",
+      "tags": [
+        "background",
+        "command-only"
       ]
     },
     "side-question": {
@@ -706,6 +925,14 @@
           "url": "https://code.claude.com/docs/en/commands",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Command-only context-management helper; LabKit documents it but does not execute it.",
+      "tags": [
+        "command-only"
       ]
     },
     "context-visualizer": {
@@ -715,6 +942,14 @@
           "url": "https://code.claude.com/docs/en/commands",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "low",
+      "stability": "stable",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Command-only inspection helper; safe to inspect manually in Claude Code.",
+      "tags": [
+        "command-only"
       ]
     },
     "agent-teams": {
@@ -731,6 +966,16 @@
           "label": "Experimental coordination",
           "detail": "Official docs call Agent Teams experimental and note limitations around session resumption, task coordination, and shutdown behavior."
         }
+      ],
+      "risk_level": "medium",
+      "stability": "experimental",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Experimental multi-agent coordination can increase quota use and file-conflict risk.",
+      "tags": [
+        "agent-runtime",
+        "experimental",
+        "power-user"
       ]
     },
     "fork-subagents": {
@@ -747,6 +992,16 @@
           "label": "Drops input isolation",
           "detail": "Forked subagents inherit the full conversation context, unlike normal subagents that start with a smaller isolated prompt."
         }
+      ],
+      "risk_level": "medium",
+      "stability": "experimental",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Forked subagents inherit full conversation context, reducing isolation.",
+      "tags": [
+        "agent-runtime",
+        "experimental",
+        "power-user"
       ]
     },
     "auto-permissions": {
@@ -769,14 +1024,7 @@
           "detail": "`--enable-auto-mode` was removed in favor of `--permission-mode auto`."
         }
       ],
-      "verification": [
-        {
-          "kind": "runtime",
-          "label": "Permission mode",
-          "detail": "Start Claude Code and inspect `/permissions` or `/status` to confirm the active permission mode.",
-          "automated": false
-        }
-      ],
+      "verification": "runtime",
       "sources": [
         {
           "label": "Claude Code CLI reference",
@@ -788,6 +1036,23 @@
           "url": "https://json.schemastore.org/claude-code-settings.json",
           "checked_at": "2026-05-11"
         }
+      ],
+      "verification_steps": [
+        {
+          "kind": "runtime",
+          "label": "Permission mode",
+          "detail": "Start Claude Code and inspect `/permissions` or `/status` to confirm the active permission mode.",
+          "automated": false
+        }
+      ],
+      "risk_level": "high",
+      "stability": "beta",
+      "recommended": true,
+      "notes": "Auto mode can approve low-risk tool calls without manual confirmation; it is not OS sandboxing.",
+      "tags": [
+        "permissions",
+        "safety",
+        "power-user"
       ]
     },
     "channels": {
@@ -821,6 +1086,16 @@
           "url": "https://json.schemastore.org/claude-code-settings.json",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "medium",
+      "stability": "beta",
+      "recommended": true,
+      "verification": "runtime",
+      "notes": "Research-preview inbound notifications depend on account, plugin, and MCP allowlists.",
+      "tags": [
+        "mcp",
+        "notifications",
+        "research-preview"
       ]
     },
     "development-channels": {
@@ -837,6 +1112,16 @@
           "url": "https://code.claude.com/docs/en/cli-reference",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "high",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Development-only flag that bypasses approved channel allowlists; LabKit will not launch it.",
+      "tags": [
+        "unsafe",
+        "development",
+        "session-flag"
       ]
     },
     "removed-auto-mode-flag": {
@@ -853,6 +1138,15 @@
           "url": "https://code.claude.com/docs/en/cli-reference",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "high",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Removed flag; use supported auto permission mode instead.",
+      "tags": [
+        "removed",
+        "permissions"
       ]
     },
     "kairos": {
@@ -862,6 +1156,16 @@
           "label": "No public enable path",
           "detail": "Public leak analyses describe KAIROS as feature-flagged or roadmap work, but current official docs do not expose a user setting, env var, or command for enabling it."
         }
+      ],
+      "risk_level": "internal",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Leak-reported architecture with no supported public setting or command.",
+      "tags": [
+        "leaked",
+        "internal",
+        "reference-only"
       ]
     },
     "auto-dream": {
@@ -883,6 +1187,16 @@
           "url": "https://claude.com/blog/new-in-claude-managed-agents",
           "checked_at": "2026-05-11"
         }
+      ],
+      "risk_level": "internal",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Leak-reported KAIROS memory cycle; do not confuse it with public Auto Memory or managed-agent dreaming.",
+      "tags": [
+        "leaked",
+        "internal",
+        "memory"
       ]
     },
     "coordinator-mode": {
@@ -893,13 +1207,23 @@
           "detail": "Community reports conflict on whether a coordinator env var ever worked; current official docs point to Agent Teams via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` instead."
         }
       ],
-      "verification": [
+      "verification": "manual",
+      "verification_steps": [
         {
           "kind": "runtime",
           "label": "Use official replacement",
           "detail": "Enable `agent-teams` and verify with a fresh session instead of relying on leaked coordinator-mode names.",
           "automated": false
         }
+      ],
+      "risk_level": "internal",
+      "stability": "internal",
+      "recommended": false,
+      "notes": "Leak-reported orchestration mode; use official Agent Teams instead.",
+      "tags": [
+        "leaked",
+        "internal",
+        "agent-runtime"
       ]
     },
     "buddy": {
@@ -909,6 +1233,16 @@
           "label": "No public enable path",
           "detail": "Leak analyses describe Buddy as an experiment or teaser; current official docs do not expose it."
         }
+      ],
+      "risk_level": "internal",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Leak-reported companion experiment with no public enablement path.",
+      "tags": [
+        "leaked",
+        "internal",
+        "reference-only"
       ]
     },
     "dream-command": {
@@ -918,6 +1252,16 @@
           "label": "Not in official command docs",
           "detail": "`/dream` is leak-reported and appears tied to unreleased KAIROS memory consolidation."
         }
+      ],
+      "risk_level": "internal",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Leak-reported command tied to unreleased KAIROS behavior.",
+      "tags": [
+        "leaked",
+        "internal",
+        "command-only"
       ]
     },
     "pr-subscriptions": {
@@ -927,6 +1271,16 @@
           "label": "Use supported PR automation",
           "detail": "Leak-reported PR subscription tools are not public; use `/autofix-pr`, Code Review, channels, routines, or GitHub Actions instead."
         }
+      ],
+      "risk_level": "internal",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Leak-reported PR tooling; use supported PR automation instead.",
+      "tags": [
+        "leaked",
+        "internal",
+        "github"
       ]
     },
     "bughunter": {
@@ -936,6 +1290,16 @@
           "label": "Use supported review commands",
           "detail": "Leak-reported `/bughunter` is not public; use `/review`, `/security-review`, `/simplify`, or `/ultrareview` instead."
         }
+      ],
+      "risk_level": "internal",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Leak-reported review command; use supported review commands instead.",
+      "tags": [
+        "leaked",
+        "internal",
+        "review"
       ]
     },
     "undercover-mode": {
@@ -945,6 +1309,16 @@
           "label": "Internal and not user-facing",
           "detail": "Leak analyses discuss this as an internal/controversial behavior, not a supported user feature. LabKit will not enable it."
         }
+      ],
+      "risk_level": "internal",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Internal/leak-reported mode involving hidden authorship signals; LabKit will not enable it.",
+      "tags": [
+        "leaked",
+        "internal",
+        "unsafe"
       ]
     },
     "anti-distillation": {
@@ -954,6 +1328,16 @@
           "label": "Not user-facing",
           "detail": "Leak analyses describe this as a server-side or internal competitive-defense mechanism, not a local feature flag users can rely on."
         }
+      ],
+      "risk_level": "internal",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Internal/server-side competitive-defense behavior, not a user-facing feature flag.",
+      "tags": [
+        "leaked",
+        "internal",
+        "server-side"
       ]
     },
     "internal-ant-user-type": {
@@ -963,6 +1347,16 @@
           "label": "Known unlikely to work",
           "detail": "Public reports say `USER_TYPE=ant` is an internal employee path and likely requires server-side or build-time validation; setting it locally should not be treated as enabling hidden features."
         }
+      ],
+      "risk_level": "internal",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Internal employee path; local USER_TYPE changes should not be treated as unlocking features.",
+      "tags": [
+        "leaked",
+        "internal",
+        "unsupported"
       ]
     },
     "ablation-baseline": {
@@ -972,6 +1366,16 @@
           "label": "Unsafe internal testing",
           "detail": "Leak analyses associate this with disabling safety behavior for experiments. LabKit intentionally refuses to write it."
         }
+      ],
+      "risk_level": "high",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Unsafe internal testing switch associated with safety ablation. LabKit refuses to write it.",
+      "tags": [
+        "leaked",
+        "internal",
+        "unsafe"
       ]
     },
     "command-injection-check-bypass": {
@@ -981,7 +1385,18 @@
           "label": "Unsafe internal testing",
           "detail": "Leak analyses associate this with disabling command-injection protections. LabKit intentionally refuses to write it."
         }
+      ],
+      "risk_level": "high",
+      "stability": "internal",
+      "recommended": false,
+      "verification": "manual",
+      "notes": "Unsafe internal testing switch associated with bypassing command-injection protections. LabKit refuses to write it.",
+      "tags": [
+        "leaked",
+        "internal",
+        "unsafe"
       ]
     }
-  }
+  },
+  "schema_version": 2
 }

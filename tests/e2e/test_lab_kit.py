@@ -378,9 +378,12 @@ class LabKitE2ETest(unittest.TestCase):
     def test_codex_list_json_exposes_polished_titles_and_control_ids(self) -> None:
         data = self.run_json("codex", "list")
         features = {feature["name"]: feature for feature in data["features"]}
-        self.assertEqual(len(data["features"]), 19)
-        self.assertEqual(data["mode"], "recommended")
-        self.assertNotIn("1m-context", features)
+        self.assertEqual(len(data["features"]), 20)
+        self.assertEqual(data["mode"], "marked")
+        self.assertIn("1m-context", features)
+        self.assertEqual(features["1m-context"]["risk_level"], "high")
+        self.assertFalse(features["1m-context"]["recommended"])
+        self.assertFalse(features["1m-context"]["selectable"])
         self.assertEqual(features["goals"]["status"], "off")
         self.assertEqual(features["goals"]["source"], "default/experimental")
         self.assertEqual(features["codex-hooks"]["status"], "on")
@@ -407,8 +410,9 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertEqual(feature["name"], "1m-context")
         self.assertIn("dependencies", feature)
         self.assertIn("limitations", feature)
-        self.assertIn("verification", feature)
-        self.assertTrue(any(item["kind"] == "strict-runtime" for item in feature["verification"]))
+        self.assertEqual(feature["verification"], "runtime")
+        self.assertIn("verification_steps", feature)
+        self.assertTrue(any(item["kind"] == "strict-runtime" for item in feature["verification_steps"]))
 
         text = self.run_lab("--no-color", "codex", "list", "--details").stdout
         self.assertIn("Dependencies", text)
@@ -520,26 +524,37 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["binary"]["version"], "2.1.999 (Claude Code)")
         self.assertEqual(data["paths"]["home"], str(self.claude_home))
-        self.assertEqual(len(data["features"]), 124)
+        self.assertEqual(len(data["features"]), 144)
 
     def test_claude_list_json_exposes_full_catalog_and_polished_copy(self) -> None:
         data = self.run_json("claude-code", "list")
-        self.assertEqual(len(data["features"]), 124)
-        self.assertEqual(data["mode"], "curated")
+        self.assertEqual(len(data["features"]), 144)
+        self.assertEqual(data["mode"], "marked")
         self.assertEqual(sum(1 for feature in data["features"] if feature["selectable"]), 120)
         features = {feature["name"]: feature for feature in data["features"]}
         self.assertEqual(features["auto-memory"]["title"], "Auto Memory")
         self.assertEqual(features["auto-memory"]["description"], "Reads and writes project memory between sessions.")
         self.assertTrue(features["auto-memory"]["dependencies"])
         self.assertTrue(features["auto-memory"]["limitations"])
-        self.assertTrue(features["auto-memory"]["verification"])
+        self.assertEqual(features["auto-memory"]["risk_level"], "low")
+        self.assertEqual(features["auto-memory"]["verification"], "runtime")
+        self.assertTrue(features["auto-memory"]["verification_steps"])
         self.assertIn("agent-view", features)
         self.assertIn("voice-dictation", features)
         self.assertIn("auto-permissions", features)
         self.assertIn("channels", features)
-        self.assertNotIn("kairos", features)
-        self.assertNotIn("ultraplan", features)
+        self.assertIn("kairos", features)
+        self.assertEqual(features["kairos"]["risk_level"], "internal")
+        self.assertFalse(features["kairos"]["recommended"])
+        self.assertIn("ultraplan", features)
+        self.assertEqual(features["ultraplan"]["risk_level"], "medium")
         self.assertEqual(features["agent-teams"]["status"], "off")
+
+        risky = self.run_json("claude-code", "list", "--risk", "high")
+        risky_names = {feature["name"] for feature in risky["features"]}
+        self.assertIn("command-injection-check-bypass", risky_names)
+        self.assertIn("kairos", risky_names)
+        self.assertNotIn("auto-memory", risky_names)
 
     def test_claude_all_mode_merges_schema_and_settings_keys(self) -> None:
         settings = {
@@ -584,12 +599,29 @@ class LabKitE2ETest(unittest.TestCase):
         kairos = self.run_json("claude-code", "info", "kairos")
         self.assertEqual(kairos["feature"]["name"], "kairos")
         self.assertFalse(kairos["feature"]["selectable"])
+        self.assertEqual(kairos["feature"]["risk_level"], "internal")
+        self.assertEqual(kairos["feature"]["stability"], "internal")
+        self.assertFalse(kairos["feature"]["recommended"])
         self.assertTrue(any(item["severity"] == "blocking" for item in kairos["feature"]["limitations"]))
         self.assertTrue(any("techsy.io" in item.get("url", "") for item in kairos["feature"]["sources"]))
 
         removed = self.run_json("claude-code", "info", "removed-auto-mode-flag")
         self.assertEqual(removed["feature"]["stage"], "removed")
         self.assertTrue(any("removed" in item["detail"] for item in removed["feature"]["limitations"]))
+
+    def test_feature_metadata_uses_smart_marking_schema(self) -> None:
+        for filename in ("claude_feature_metadata.json", "codex_feature_metadata.json"):
+            data = read_json(ROOT / "lab_kit" / "data" / filename)
+            self.assertEqual(data["schema_version"], 2)
+            self.assertNotIn("default_hidden", data)
+            for name, entry in data["features"].items():
+                with self.subTest(filename=filename, feature=name):
+                    self.assertIn(entry["risk_level"], {"low", "medium", "high", "internal"})
+                    self.assertIn(entry["stability"], {"stable", "experimental", "beta", "internal"})
+                    self.assertIsInstance(entry["recommended"], bool)
+                    self.assertIn(entry["verification"], {"runtime", "config", "manual", "none"})
+                    self.assertIsInstance(entry["notes"], str)
+                    self.assertIsInstance(entry["tags"], list)
 
     def test_claude_schema_derived_boolean_can_be_changed(self) -> None:
         self.run_json("claude-code", "enable", "include-co-authored-by")
@@ -697,6 +729,18 @@ class LabKitE2ETest(unittest.TestCase):
         listed = self.run_json("claude-code", "list", "--all", env=env)
         names = {feature["name"] for feature in listed["features"]}
         self.assertIn("new-schema-toggle", names)
+
+    def test_invalid_cached_claude_schema_falls_back_to_bundled_schema(self) -> None:
+        data_home = self.tmp / "labkit-data"
+        data_home.mkdir()
+        (data_home / "claude-code-settings-schema.json").write_text('{"type":"array"}\n', encoding="utf-8")
+        env = self.env.copy()
+        env["LABKIT_DATA_HOME"] = str(data_home)
+
+        listed = self.run_json("claude-code", "list", "--all", env=env)
+        names = {feature["name"] for feature in listed["features"]}
+        self.assertEqual(listed["schema"]["source"], "bundled")
+        self.assertIn("include-co-authored-by", names)
 
     def test_legacy_top_level_codex_alias_still_works_but_is_hidden(self) -> None:
         help_text = self.run_lab("--no-color", "--help").stdout

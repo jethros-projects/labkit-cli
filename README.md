@@ -59,6 +59,7 @@ labkit --version
 labkit codex check
 labkit codex list
 labkit codex list --all
+labkit codex list --risk high
 labkit codex list --details
 labkit codex info <control-id>
 labkit codex discover
@@ -70,6 +71,7 @@ labkit codex verify --strict
 labkit claude-code check
 labkit claude-code list
 labkit claude-code list --all
+labkit claude-code list --risk high
 labkit claude-code list --details
 labkit claude-code info <control-id>
 labkit claude-code discover
@@ -80,15 +82,30 @@ labkit claude-code disable <control-id> [control-id...]
 labkit update-features
 ```
 
-Use `list` to see the clean recommended controls. Use `list --all` or `discover` when you want the complete surface. Use `info <control-id>` or `list --details` when you need dependencies, limitations, verification steps, and primary-source links. Use `select` for the polished interactive flow.
+Use `list` to see the marked controls. Use `list --all` or `discover` when you want schema, settings-file, or raw registry extras. Use `--risk high` to focus on high-risk and internal controls. Use `info <control-id>` or `list --details` when you need dependencies, limitations, verification steps, and primary-source links. Use `select` for the polished interactive flow.
+
+## Philosophy
+
+We show everything, but mark it clearly so you can make informed decisions.
+
+Older Lab Kit versions hid some Claude Code leak-only or internal entries from the default view. Lab Kit now favors transparency: curated controls stay visible by default, and each one carries explicit metadata for risk, stability, recommendation status, verification mode, notes, and tags. Safe defaults come from clear marking and reference-only behavior, not from making names disappear.
+
+Risk levels:
+
+- **low**: ordinary local setting or UI/runtime behavior with limited blast radius.
+- **medium**: power-user, provider, automation, privacy, or multi-agent behavior that deserves a fresh-session check.
+- **high**: write-capable, permission-sensitive, billing-sensitive, unsupported, or safety-sensitive behavior.
+- **internal**: leak-reported, removed, internal-only, or unsupported behavior shown for awareness; Lab Kit will not write these controls.
+
+Stability badges use **stable**, **experimental**, **beta**, or **internal**. Verification modes use **config** for file/registry proof, **runtime** for behavior that needs a live session, **manual** for command-only or reference-only checks, and **none** where no meaningful verification is available.
 
 ## 100% Coverage Approach
 
-Codex support is primarily dynamic. Lab Kit reads the live registry from `codex features list`, maps known flags through `lab_kit/data/codex_feature_metadata.json` for friendly titles and groups, and generates sensible controls for any new registry flag it has never seen before. The default view stays recommended and calm; `--all` shows every currently available registry flag, and `discover` shows the raw registry.
+Codex support is primarily dynamic. Lab Kit reads the live registry from `codex features list`, maps known flags through `lab_kit/data/codex_feature_metadata.json` for friendly titles and groups, and generates sensible controls for any new registry flag it has never seen before. The default view shows every curated control with smart markings; `--all` adds every currently available registry flag, and `discover` shows the raw registry.
 
-Claude Code support is curated plus schema-driven. The hand-curated list remains the default because it has the best descriptions and safe enable/disable semantics. `list --all` and `discover` merge that list with the official JSON Schema from [SchemaStore](https://json.schemastore.org/claude-code-settings.json), plus any extra keys already present in the selected `settings.json`.
+Claude Code support is curated plus schema-driven. The hand-curated list remains the default because it has the best descriptions and safe enable/disable semantics, including formerly hidden leak/internal references. `list --all` and `discover` merge that list with the official JSON Schema from [SchemaStore](https://json.schemastore.org/claude-code-settings.json), plus any extra keys already present in the selected `settings.json`.
 
-Claude leak and research-preview coverage is evidence-ranked. Publicly documented controls such as Agent View, voice dictation, auto permission mode, channels, Ultraplan, and Ultrareview include dependency and limitation notes. Leak-only or unsafe internal names such as KAIROS, Auto-Dream, Undercover Mode, and command-injection bypasses are hidden from the default view, shown in `--all` / `discover` / `info`, and marked reference-only so Lab Kit will not write unsupported toggles.
+Claude leak and research-preview coverage is evidence-ranked. Publicly documented controls such as Agent View, voice dictation, auto permission mode, channels, Ultraplan, and Ultrareview include dependency and limitation notes. Leak-only or unsafe internal names such as KAIROS, Auto-Dream, Undercover Mode, and command-injection bypasses are visible by default, marked high risk or internal, and reference-only so Lab Kit will not write unsupported toggles.
 
 Run this periodically to refresh the local cache:
 
@@ -115,7 +132,7 @@ labkit claude-code info auto-memory
 labkit claude-code list --all --json
 ```
 
-For Codex, `info` combines the live registry with `lab_kit/data/codex_feature_metadata.json`, including known upstream dependencies such as `enable_fanout` implying `multi_agent` and `code_mode_only` implying `code_mode`. The old `1m-context` catalog patch is now hidden from the recommended view and non-selectable: OpenAI documents GPT-5.5 in Codex as a 400K-context surface, while API GPT-5.5 is the documented 1M surface. `verify --strict` can still inspect existing overrides and recent session logs, and `labkit codex disable 1m-context` removes the old Lab Kit override.
+For Codex, `info` combines the live registry with `lab_kit/data/codex_feature_metadata.json`, including known upstream dependencies such as `enable_fanout` implying `multi_agent` and `code_mode_only` implying `code_mode`. The old `1m-context` catalog patch is now visible, high-risk, and non-selectable: OpenAI documents GPT-5.5 in Codex as a 400K-context surface, while API GPT-5.5 is the documented 1M surface. `verify --strict` can still inspect existing overrides and recent session logs, and `labkit codex disable 1m-context` removes the old Lab Kit override.
 
 For Claude Code, `info` combines curated metadata, SchemaStore keys, and settings-file discoveries. Lab Kit records where verification stops: it can prove the file value, but account entitlement, provider IAM, managed policy precedence, and live context/model behavior require Claude Code runtime checks such as `/status`, `/context`, `/memory`, `/hooks`, `/mcp`, `/permissions`, or `/model`.
 
@@ -163,12 +180,14 @@ Lab Kit works well for humans and for agents.
 ```bash
 labkit codex list --json
 labkit codex list --all --json
+labkit codex list --risk high --json
 labkit codex info <control-id> --json
 labkit codex enable --dry-run --json <control-id>
 labkit codex verify --strict
 
 labkit claude-code list --json
 labkit claude-code list --all --json
+labkit claude-code list --risk high --json
 labkit claude-code info <control-id> --json
 labkit claude-code discover --json
 labkit claude-code enable --dry-run --json <control-id>
@@ -203,10 +222,11 @@ labkit --claude-bin /path/to/claude claude-code check
 ## Architecture Notes
 
 - `labkit` is the executable used from source checkouts and installer installs.
-- `lab_kit/cli.py` contains the packaged CLI implementation used by the `labkit` console entry point.
-- `lab_kit/data/codex_feature_metadata.json` keeps Codex dynamic registry output readable and records known dependencies, limitations, verification steps, and source links without making coverage static.
+- `lab_kit/cli.py` contains only argument parsing and command routing.
+- `lab_kit/models.py`, `ui.py`, `metadata.py`, `utils.py`, `codex.py`, and `claude.py` split shared models, terminal rendering, metadata merging, file/process helpers, and product-specific behavior.
+- `lab_kit/data/codex_feature_metadata.json` keeps Codex dynamic registry output readable and records smart markings, dependencies, limitations, verification steps, and source links without making coverage static.
 - `lab_kit/data/claude-code-settings-schema.json` is the bundled Claude Code schema snapshot used when no refreshed cache exists.
-- `lab_kit/data/claude_feature_metadata.json` overlays Claude Code controls with docs-backed dependency and verification metadata while preserving schema-driven coverage.
+- `lab_kit/data/claude_feature_metadata.json` overlays Claude Code controls with smart markings and docs-backed dependency/verification metadata while preserving schema-driven coverage.
 - Runtime dependencies are intentionally zero; development tools live behind the `.[dev]` extra.
 
 ## Windows Caveats
