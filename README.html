@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lab Kit CLI</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f1115;
+      --panel: #171a21;
+      --text: #eff1f5;
+      --muted: #a8b0bd;
+      --line: #2b303b;
+      --accent: #4cc9f0;
+      --code: #222734;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #fbfbfc;
+        --panel: #ffffff;
+        --text: #171923;
+        --muted: #5c6472;
+        --line: #e1e4ea;
+        --accent: #0969da;
+        --code: #f4f6f8;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.62 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      width: min(860px, calc(100vw - 32px));
+      margin: 48px auto;
+      padding: 0 0 56px;
+    }
+    h1, h2, h3 {
+      line-height: 1.15;
+      margin: 2rem 0 0.75rem;
+    }
+    h1 {
+      margin-top: 0;
+      font-size: clamp(2.4rem, 8vw, 4.75rem);
+      letter-spacing: 0;
+    }
+    h2 {
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--line);
+      font-size: 1.45rem;
+    }
+    p, ul { color: var(--muted); }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--code);
+      color: var(--text);
+      padding: 0.08rem 0.32rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 1rem;
+    }
+    pre code {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      padding: 0;
+      color: var(--text);
+    }
+    li { margin: 0.35rem 0; }
+    strong { color: var(--text); }
+  </style>
+</head>
+<body>
+  <main>
+<h1>Lab Kit CLI</h1>
+<p>Power up Codex CLI and Claude Code with Lab Kit CLI!</p>
+<p>Lab Kit CLI is for people who use coding agents every day and want easier access to the experimental, preview, and locally gated controls already present in their installed tools. Instead of digging through config files or guessing environment variables, run one command, review the available controls, and choose what should be active.</p>
+<p>It supports Codex CLI and Claude Code. It backs up files before editing. It does not auto-enable anything.</p>
+<p>Lab Kit cannot grant account access, paid-plan access, model access, or server-side rollouts. It only toggles controls your local CLI already knows about.</p>
+<h2>Quick Start</h2>
+<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/jethros-projects/lab-kit-cli/main/install.sh | sh</code></pre>
+<p>Then run it from anywhere:</p>
+<pre><code class="language-bash">lab-kit codex select
+lab-kit claude-code select</code></pre>
+<p>The installer adds <code>~/.local/bin</code> to your shell profile when needed. Open a new terminal after install, or run this once in the current terminal:</p>
+<pre><code class="language-bash">export PATH=&quot;$HOME/.local/bin:$PATH&quot;</code></pre>
+<p>The selector lets you pick multiple active or inactive controls, then apply them together. Nothing changes until you confirm.</p>
+<h2>Why Use It</h2>
+<ul>
+<li>Turn on experimental agent controls without hand-editing config files.</li>
+<li>See Codex and Claude Code controls grouped by area.</li>
+<li>Enable or disable multiple controls in one guided flow.</li>
+<li>Preview changes with <code>--dry-run</code>.</li>
+<li>Use <code>--json</code> from scripts and other agents.</li>
+<li>Keep backups of config/settings before every write.</li>
+<li>Verify Codex runtime evidence for context-window changes.</li>
+</ul>
+<h2>Core Commands</h2>
+<pre><code class="language-bash">lab-kit codex check
+lab-kit codex list
+lab-kit codex select
+lab-kit codex enable &lt;control-id&gt; [control-id...]
+lab-kit codex disable &lt;control-id&gt; [control-id...]
+lab-kit codex verify
+
+lab-kit claude-code check
+lab-kit claude-code list
+lab-kit claude-code select
+lab-kit claude-code enable &lt;control-id&gt; [control-id...]
+lab-kit claude-code disable &lt;control-id&gt; [control-id...]</code></pre>
+<p>Use <code>list</code> to find control ids. Use <code>select</code> for the polished interactive flow.</p>
+<h2>Safety Model</h2>
+<p>Read-only commands:</p>
+<pre><code class="language-bash">lab-kit codex check
+lab-kit codex list
+lab-kit codex discover
+lab-kit codex verify
+lab-kit claude-code check
+lab-kit claude-code list</code></pre>
+<p>Write commands:</p>
+<pre><code class="language-bash">lab-kit codex select
+lab-kit codex enable &lt;control-id&gt;
+lab-kit codex disable &lt;control-id&gt;
+lab-kit claude-code select
+lab-kit claude-code enable &lt;control-id&gt;
+lab-kit claude-code disable &lt;control-id&gt;</code></pre>
+<p>Write commands back up the target file before editing it. After enabling controls, start a fresh Codex CLI or Claude Code session so the new config/settings are loaded.</p>
+<h2>Agent-Friendly</h2>
+<p>Lab Kit works well for humans and for agents.</p>
+<pre><code class="language-bash">lab-kit codex list --json
+lab-kit codex enable --dry-run --json &lt;control-id&gt;
+lab-kit codex verify --strict
+
+lab-kit claude-code list --json
+lab-kit claude-code enable --dry-run --json &lt;control-id&gt;</code></pre>
+<p>JSON mode disables color and progress output. Runtime errors are emitted as JSON on stderr.</p>
+<h2>Testing</h2>
+<p>Run the hermetic E2E suite:</p>
+<pre><code class="language-bash">tests/run_e2e.sh</code></pre>
+<p>Those tests execute the real <code>lab-kit</code> CLI against isolated temp homes and fake <code>codex</code> / <code>claude</code> binaries. That keeps CI deterministic and prevents tests from editing your real <code>~/.codex</code> or <code>~/.claude</code> files.</p>
+<p>Run optional live smoke tests against real installed binaries:</p>
+<pre><code class="language-bash">LAB_KIT_LIVE_E2E=1 tests/run_e2e.sh</code></pre>
+<p>Live smoke tests are read-only or dry-run only.</p>
+<h2>What It Touches</h2>
+<p>Codex:</p>
+<ul>
+<li><code>~/.codex/config.toml</code></li>
+<li>local model-catalog override used for the <code>1m-context</code> control</li>
+<li>recent Codex session logs for runtime verification</li>
+</ul>
+<p>Claude Code:</p>
+<ul>
+<li><code>~/.claude/settings.json</code></li>
+<li><code>.claude/settings.json</code> with <code>--scope project</code></li>
+<li><code>.claude/settings.local.json</code> with <code>--scope local</code></li>
+<li>documented Claude Code <code>env</code> settings under the selected scope</li>
+</ul>
+<p>If your binaries live somewhere unusual:</p>
+<pre><code class="language-bash">lab-kit --codex-bin /path/to/codex codex check
+lab-kit --claude-bin /path/to/claude claude-code check</code></pre>
+<h2>Limits</h2>
+<p>Lab Kit is a local control surface, not an entitlement bypass.</p>
+<p>Some controls are only useful when your installed CLI build, account, model, or rollout already supports them. Lab Kit can make local switches easy to inspect and edit; it cannot force a remote service to expose a feature.</p>
+<h2>Repository Map</h2>
+<ul>
+<li><code>lab-kit</code>: main CLI.</li>
+<li><code>install.sh</code>: installer for the <code>lab-kit</code> executable.</li>
+<li><code>scripts/render_readme.py</code>: local README renderer.</li>
+<li><code>README.html</code>: generated local preview of the README.</li>
+<li><code>README.md</code>: product and usage guide.</li>
+</ul>
+  </main>
+</body>
+</html>
