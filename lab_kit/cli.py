@@ -9,7 +9,6 @@ known controls. Nothing is changed unless the user chooses it.
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
 import json
 import os
 import re
@@ -20,13 +19,20 @@ import tempfile
 import textwrap
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from importlib import metadata as importlib_metadata
+from importlib import resources
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
+from lab_kit import __version__
 
 APP_NAME = "Lab Kit CLI"
+CLAUDE_SCHEMA_URL = "https://json.schemastore.org/claude-code-settings.json"
 TARGET_MODEL = "gpt-5.5"
 CATALOG_CONTEXT_WINDOW = 1_052_632
 MODEL_CONTEXT_WINDOW = 1_000_000
@@ -473,6 +479,144 @@ CURATED_FEATURES: list[Feature] = [
 ]
 
 FEATURE_BY_NAME = {feature.name: feature for feature in CURATED_FEATURES}
+
+
+def package_version() -> str:
+    try:
+        return importlib_metadata.version("labkit-cli")
+    except importlib_metadata.PackageNotFoundError:
+        return __version__
+
+
+def package_json(filename: str) -> dict[str, Any]:
+    try:
+        text = resources.files("lab_kit").joinpath("data", filename).read_text(encoding="utf-8")
+        data = json.loads(text)
+    except (FileNotFoundError, json.JSONDecodeError, ModuleNotFoundError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def user_data_home() -> Path:
+    return Path(os.environ.get("LABKIT_DATA_HOME", "~/.local/share/labkit")).expanduser()
+
+
+def cached_claude_schema_path() -> Path:
+    return user_data_home() / "claude-code-settings-schema.json"
+
+
+def cached_codex_registry_path() -> Path:
+    return user_data_home() / "codex-features.json"
+
+
+def load_codex_metadata() -> dict[str, Any]:
+    return package_json("codex_feature_metadata.json")
+
+
+def codex_metadata_entry(metadata: dict[str, Any], key_or_name: str) -> dict[str, Any]:
+    features = metadata.get("features")
+    if not isinstance(features, dict):
+        return {}
+    entry = features.get(key_or_name)
+    if isinstance(entry, dict):
+        return entry
+    for value in features.values():
+        if not isinstance(value, dict):
+            continue
+        aliases = value.get("aliases") if isinstance(value.get("aliases"), list) else []
+        if value.get("name") == key_or_name or key_or_name in aliases:
+            return value
+    return {}
+
+
+def control_id_from_key(key: str) -> str:
+    text = key.replace(".", "-").replace("_", "-")
+    text = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", text)
+    return text.lower()
+
+
+def title_from_id(name: str) -> str:
+    return " ".join(part.upper() if part in {"ui", "api", "mcp"} else part.capitalize() for part in re.split(r"[-_.]+", name))
+
+
+def apply_codex_metadata(feature: Feature, metadata: dict[str, Any]) -> Feature:
+    entry = codex_metadata_entry(metadata, feature.key or feature.name) or codex_metadata_entry(metadata, feature.name)
+    if not entry:
+        return feature
+    aliases = entry.get("aliases") if isinstance(entry.get("aliases"), list) else []
+    registry_keys = tuple(str(item) for item in aliases)
+    if feature.key:
+        registry_keys = (feature.key, *registry_keys)
+    registry_keys = (*feature.registry_keys, *tuple(key for key in registry_keys if key not in feature.registry_keys))
+    return replace(
+        feature,
+        name=str(entry.get("name") or feature.name),
+        title=str(entry.get("title") or feature.title),
+        cluster=str(entry.get("cluster") or feature.cluster),
+        description=str(entry.get("description") or feature.description),
+        registry_keys=tuple(key for key in registry_keys if key),
+    )
+
+
+def codex_curated_features() -> list[Feature]:
+    metadata = load_codex_metadata()
+    return [apply_codex_metadata(feature, metadata) for feature in CURATED_FEATURES]
+
+
+def dynamic_codex_feature(name: str, entry: RegistryEntry, metadata: dict[str, Any]) -> Feature:
+    meta = codex_metadata_entry(metadata, name) or codex_metadata_entry(metadata, control_id_from_key(name))
+    control_id = str(meta.get("name") or control_id_from_key(name))
+    return Feature(
+        control_id,
+        str(meta.get("title") or title_from_id(control_id)),
+        str(meta.get("cluster") or "Available Codex Flags"),
+        entry.stage,
+        "feature",
+        str(meta.get("description") or f"Available in your installed Codex CLI feature registry as `{name}`."),
+        key=name,
+        selectable=entry.stage not in {"removed", "deprecated"},
+        registry_keys=(name,),
+    )
+
+
+def codex_features_from_registry(registry: dict[str, RegistryEntry], *, include_all: bool = False) -> list[Feature]:
+    metadata = load_codex_metadata()
+    curated = codex_curated_features()
+    recommended = metadata.get("recommended")
+    recommended_names = set(str(item) for item in recommended) if isinstance(recommended, list) else {feature.name for feature in curated}
+
+    features: list[Feature] = []
+    represented_registry_keys: set[str] = set()
+    for feature in curated:
+        keys = set(feature.registry_keys)
+        if feature.key:
+            keys.add(feature.key)
+        represented_registry_keys.update(keys)
+        if include_all or feature.name in recommended_names:
+            features.append(feature)
+
+    if include_all:
+        for registry_name, entry in sorted(registry.items()):
+            if entry.stage in {"removed", "deprecated"}:
+                continue
+            if registry_name in represented_registry_keys:
+                continue
+            features.append(dynamic_codex_feature(registry_name, entry, metadata))
+
+    return features
+
+
+def codex_feature_lookup(name: str, registry: dict[str, RegistryEntry]) -> Feature | None:
+    for feature in codex_features_from_registry(registry, include_all=True):
+        names = {feature.name}
+        if feature.key:
+            names.add(feature.key)
+            names.add(control_id_from_key(feature.key))
+        names.update(feature.registry_keys)
+        names.update(control_id_from_key(key) for key in feature.registry_keys)
+        if name in names:
+            return feature
+    return None
 
 
 def claude_setting(
@@ -1611,6 +1755,203 @@ CLAUDE_FEATURES = apply_copy_overrides(CLAUDE_FEATURES, CLAUDE_COPY_OVERRIDES)
 CLAUDE_FEATURE_BY_NAME = {feature.name: feature for feature in CLAUDE_FEATURES}
 
 
+def fetch_json_url(url: str) -> dict[str, Any]:
+    request = Request(url, headers={"User-Agent": "labkit-cli"})
+    try:
+        with urlopen(request, timeout=20) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except (OSError, URLError, json.JSONDecodeError) as exc:
+        die(f"Could not fetch JSON from {url}: {exc}")
+    if not isinstance(data, dict):
+        die(f"Expected JSON object from {url}")
+    return data
+
+
+def load_claude_schema() -> tuple[dict[str, Any], str]:
+    cache = cached_claude_schema_path()
+    if cache.exists():
+        try:
+            data = json.loads(cache.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data, str(cache)
+        except json.JSONDecodeError:
+            pass
+    bundled = package_json("claude-code-settings-schema.json")
+    if bundled:
+        return bundled, "bundled"
+    return {}, "unavailable"
+
+
+def write_cached_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def schema_properties(schema: dict[str, Any]) -> dict[str, Any]:
+    properties = schema.get("properties")
+    return properties if isinstance(properties, dict) else {}
+
+
+def schema_env_properties(schema: dict[str, Any]) -> dict[str, Any]:
+    env = schema_properties(schema).get("env")
+    if not isinstance(env, dict):
+        return {}
+    properties = env.get("properties")
+    return properties if isinstance(properties, dict) else {}
+
+
+def claude_known_keys(features: list[Feature]) -> set[str]:
+    return {feature.key for feature in features if feature.key}
+
+
+def schema_default_enabled(spec: dict[str, Any], active: Any) -> bool | None:
+    if "default" not in spec:
+        return None
+    return value_matches(spec.get("default"), active)
+
+
+def schema_env_values(spec: dict[str, Any]) -> tuple[str, str] | None:
+    enum = spec.get("enum")
+    values = {str(item) for item in enum} if isinstance(enum, list) else set()
+    if {"0", "1"}.issubset(values):
+        return "1", "0"
+    if {"true", "false"}.issubset({value.lower() for value in values}):
+        return "true", "false"
+    return None
+
+
+def schema_feature_for_key(key: str, spec: dict[str, Any], *, env: bool = False) -> Feature:
+    name = control_id_from_key(key)
+    title = title_from_id(name.replace("claude-code-", "").replace("claude-", ""))
+    description = str(spec.get("description") or f"Claude Code setting `{key}` discovered from the official JSON Schema.")
+    if env:
+        values = schema_env_values(spec)
+        selectable = values is not None
+        value, inactive = values if values else ("1", "0")
+        return Feature(
+            name,
+            title,
+            "Schema: Environment",
+            "schema",
+            "claude_env",
+            description,
+            key=f"env.{key}",
+            value=value,
+            inactive_value=inactive,
+            default_enabled=schema_default_enabled(spec, value),
+            selectable=selectable,
+        )
+
+    setting_type = spec.get("type")
+    selectable = setting_type == "boolean"
+    value: Any = True if selectable else spec.get("default")
+    inactive: Any = False if selectable else None
+    return Feature(
+        name,
+        title,
+        "Schema: Settings",
+        "schema",
+        "claude_bool" if selectable else "schema_setting",
+        description,
+        key=key,
+        value=value,
+        inactive_value=inactive,
+        default_enabled=schema_default_enabled(spec, value) if selectable else None,
+        selectable=selectable,
+    )
+
+
+def schema_features(schema: dict[str, Any], curated: list[Feature]) -> list[Feature]:
+    known = claude_known_keys(curated)
+    generated: list[Feature] = []
+    for key, spec in sorted(schema_properties(schema).items()):
+        if key in {"$schema", "env"} or key in known or not isinstance(spec, dict):
+            continue
+        generated.append(schema_feature_for_key(key, spec))
+    for key, spec in sorted(schema_env_properties(schema).items()):
+        dotted = f"env.{key}"
+        if dotted in known or not isinstance(spec, dict):
+            continue
+        generated.append(schema_feature_for_key(key, spec, env=True))
+    return generated
+
+
+def flatten_settings_keys(data: dict[str, Any], prefix: str = "") -> set[str]:
+    keys: set[str] = set()
+    for key, value in data.items():
+        dotted = f"{prefix}.{key}" if prefix else str(key)
+        keys.add(dotted)
+        if isinstance(value, dict):
+            keys.update(flatten_settings_keys(value, dotted))
+    return keys
+
+
+def settings_only_features(settings: dict[str, Any], known_features: list[Feature]) -> list[Feature]:
+    known = claude_known_keys(known_features)
+    features: list[Feature] = []
+    for key in sorted(flatten_settings_keys(settings)):
+        if key in known or key == "$schema":
+            continue
+        if any(known_key.startswith(f"{key}.") for known_key in known):
+            continue
+        actual = get_nested(settings, key)
+        name = control_id_from_key(key.replace(".", "-"))
+        selectable = isinstance(actual, bool)
+        features.append(
+            Feature(
+                name,
+                title_from_id(name),
+                "Settings File",
+                "settings",
+                "claude_bool" if selectable else "observed_setting",
+                f"Present in the selected Claude Code settings file as `{key}` but not curated by Lab Kit.",
+                key=key,
+                value=True if selectable else actual,
+                inactive_value=False if selectable else None,
+                selectable=selectable,
+            )
+        )
+    return features
+
+
+def claude_features(settings: dict[str, Any] | None = None, *, include_all: bool = False) -> list[Feature]:
+    if not include_all:
+        return CLAUDE_FEATURES
+    schema, _source = load_claude_schema()
+    features = [*CLAUDE_FEATURES, *schema_features(schema, CLAUDE_FEATURES)]
+    if settings is not None:
+        features.extend(settings_only_features(settings, features))
+    seen: set[str] = set()
+    unique: list[Feature] = []
+    for feature in features:
+        if feature.name in seen:
+            continue
+        seen.add(feature.name)
+        unique.append(feature)
+    return unique
+
+
+def claude_feature_lookup(name: str, settings: dict[str, Any]) -> Feature | None:
+    for feature in claude_features(settings, include_all=True):
+        names = {feature.name}
+        if feature.key:
+            names.add(feature.key)
+            names.add(control_id_from_key(feature.key.replace(".", "-")))
+        if name in names:
+            return feature
+    return None
+
+
+def claude_known_settings_data(settings: dict[str, Any], features: list[Feature]) -> list[dict[str, Any]]:
+    rows = []
+    state_getter = lambda feature: claude_feature_state(feature, settings)
+    for item in feature_catalog_data_for(features, state_getter):
+        rows.append(item)
+    return rows
+
+
 def say(message: str = "") -> None:
     print(message)
 
@@ -1633,7 +1974,7 @@ def cli_codex_bin() -> Path | None:
     return Path(found) if found else None
 
 
-def preferred_codex_bin(explicit: str | None) -> Path:
+def preferred_codex_bin(explicit: str | None, *, required: bool = True) -> Path | None:
     if explicit:
         path = Path(explicit).expanduser()
         if not path.is_file() or not os.access(path, os.X_OK):
@@ -1641,11 +1982,23 @@ def preferred_codex_bin(explicit: str | None) -> Path:
         return path
     env_bin = os.environ.get("CODEX_BIN")
     if env_bin:
-        return preferred_codex_bin(env_bin)
+        return preferred_codex_bin(env_bin, required=required)
     path = cli_codex_bin()
     if not path:
-        die("Could not find Codex CLI on PATH. Pass --codex-bin /path/to/codex.")
+        if required:
+            die("Could not find Codex CLI on PATH. Pass --codex-bin /path/to/codex.")
+        return None
     return path
+
+
+def require_codex_bin(explicit: str | None) -> Path:
+    path = preferred_codex_bin(explicit, required=True)
+    assert path is not None
+    return path
+
+
+def optional_codex_bin(explicit: str | None) -> Path | None:
+    return preferred_codex_bin(explicit, required=False)
 
 
 def claude_bin() -> Path | None:
@@ -2003,6 +2356,9 @@ def claude_feature_state(feature: Feature, settings: dict[str, Any]) -> tuple[st
     if not feature.key:
         return "off", "not configurable"
     actual = get_nested(settings, feature.key)
+    if feature.kind in {"schema_setting", "observed_setting"}:
+        source = "settings env" if feature.key.startswith("env.") else "settings"
+        return ("on" if actual is not None else "off"), source if actual is not None else "schema"
     if actual is None and feature.default_enabled is not None:
         return ("on" if feature.default_enabled else "off"), "default"
     source = "settings env" if feature.key.startswith("env.") else "settings"
@@ -2046,12 +2402,14 @@ def patch_gpt55_context(paths: Paths, codex_bin: Path) -> None:
     write_config(paths, config)
 
 
-def apply_feature(feature: Feature, paths: Paths, codex_bin: Path, enabled: bool) -> None:
+def apply_feature(feature: Feature, paths: Paths, codex_bin: Path | None, enabled: bool) -> None:
     if feature.kind == "manual":
         die(f"{feature.name} is reference-only and cannot be changed by this CLI.")
     if feature.kind == "catalog":
         if not enabled:
             die("Disabling 1m-context is not automated. Restore a backup or remove model_catalog_json manually.")
+        if codex_bin is None:
+            die("1m-context needs a Codex CLI binary so Lab Kit can read the model catalog.")
         patch_gpt55_context(paths, codex_bin)
         return
     if feature.kind == "top" and feature.key:
@@ -2189,10 +2547,14 @@ def feature_data(feature: Feature, config: dict[str, Any], registry: dict[str, R
     }
 
 
-def feature_catalog_data(config: dict[str, Any], registry: dict[str, RegistryEntry]) -> list[dict[str, Any]]:
+def feature_catalog_data(
+    config: dict[str, Any],
+    registry: dict[str, RegistryEntry],
+    features: list[Feature] | None = None,
+) -> list[dict[str, Any]]:
     data: list[dict[str, Any]] = []
     index = 1
-    for feature in CURATED_FEATURES:
+    for feature in features or codex_features_from_registry(registry):
         item_index = index if feature.selectable else None
         data.append(feature_data(feature, config, registry, item_index))
         if feature.selectable:
@@ -2234,6 +2596,38 @@ def registry_data(registry: dict[str, RegistryEntry], include_all: bool = False)
             continue
         rows.append({"name": name, "stage": entry.stage, "enabled": entry.enabled})
     return rows
+
+
+def registry_from_data(rows: Any) -> dict[str, RegistryEntry]:
+    registry: dict[str, RegistryEntry] = {}
+    if not isinstance(rows, list):
+        return registry
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("name")
+        stage = row.get("stage")
+        enabled = row.get("enabled")
+        if isinstance(name, str) and isinstance(stage, str) and isinstance(enabled, bool):
+            registry[name] = RegistryEntry(stage=stage, enabled=enabled)
+    return registry
+
+
+def load_cached_codex_registry() -> dict[str, RegistryEntry]:
+    path = cached_codex_registry_path()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return registry_from_data(data.get("features"))
+
+
+def codex_registry_with_cache(report: BinaryReport) -> dict[str, RegistryEntry]:
+    return report.features or load_cached_codex_registry()
 
 
 def evidence_data(paths: Paths, evidence: list[RuntimeEvidence], limit: int | None = None) -> list[dict[str, Any]]:
@@ -2316,7 +2710,7 @@ def cmd_check(args: argparse.Namespace) -> None:
     paths = resolve_paths()
     config = parse_toml_light(read_config(paths))
     configured_window = int_or_none(config.get("model_context_window"))
-    codex_bin = preferred_codex_bin(args.codex_bin)
+    codex_bin = optional_codex_bin(args.codex_bin)
     report = inspect_binary("Codex CLI", codex_bin)
     if JSON_OUTPUT:
         emit_json(
@@ -2340,22 +2734,33 @@ def cmd_check(args: argparse.Namespace) -> None:
     section("Binary")
     render_binary_report(report, configured_window)
     section("Next")
-    status_line("info", "Review Codex controls", "`lab-kit codex list`")
-    status_line("info", "Open Codex checklist", "`lab-kit codex select`")
-    status_line("info", "Verify runtime evidence", "`lab-kit codex verify`")
+    status_line("info", "Review Codex controls", "`labkit codex list`")
+    status_line("info", "Open Codex checklist", "`labkit codex select`")
+    status_line("info", "Verify runtime evidence", "`labkit codex verify`")
 
 
 def cmd_list(args: argparse.Namespace) -> None:
     paths = resolve_paths()
     config = parse_toml_light(read_config(paths))
-    cli_report = inspect_binary("Codex CLI", preferred_codex_bin(args.codex_bin))
-    registry = cli_report.features
+    cli_report = inspect_binary("Codex CLI", optional_codex_bin(args.codex_bin))
+    registry = codex_registry_with_cache(cli_report)
+    include_all = bool(getattr(args, "all", False))
+    features = codex_features_from_registry(registry, include_all=include_all)
     if JSON_OUTPUT:
-        emit_json({"command": "codex list", "features": feature_catalog_data(config, registry)})
+        emit_json(
+            {
+                "command": "codex list",
+                "mode": "all" if include_all else "recommended",
+                "source": binary_report_data(cli_report),
+                "features": feature_catalog_data(config, registry, features),
+            }
+        )
         return
 
     banner("Codex controls. Read-only view; nothing changes from this command.")
-    render_feature_catalog(config, registry, numbered=True)
+    if not include_all:
+        status_line("info", "Recommended view", "use `labkit codex list --all` to include every current registry flag")
+    render_feature_catalog(config, registry, numbered=True, features=features)
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -2365,7 +2770,7 @@ def cmd_status(args: argparse.Namespace) -> None:
 def cmd_verify(args: argparse.Namespace) -> None:
     paths = resolve_paths()
     config = parse_toml_light(read_config(paths))
-    codex_bin = preferred_codex_bin(args.codex_bin)
+    codex_bin = require_codex_bin(args.codex_bin)
     report = inspect_binary("Codex", codex_bin)
 
     configured_window = int_or_none(config.get("model_context_window"))
@@ -2424,10 +2829,7 @@ def cmd_verify(args: argparse.Namespace) -> None:
                     "ok": runtime_ok,
                     "latest_window": latest.window if latest else None,
                     "expected_runtime_window": expected_runtime,
-                    "scanned_windows": [
-                        {"window": window, "count": count}
-                        for window, count in sorted(window_counts(evidence).items())
-                    ],
+                    "scanned_windows": [{"window": window, "count": count} for window, count in sorted(window_counts(evidence).items())],
                     "events": evidence_data(paths, evidence, args.events),
                 },
                 "coverage": {
@@ -2477,7 +2879,7 @@ def cmd_verify(args: argparse.Namespace) -> None:
     kv("scanned windows", counts)
     say("")
     rows = [(muted("timestamp"), muted("event"), muted("window"), muted("total_tokens"), muted("session"))]
-    for item in evidence[-args.events:]:
+    for item in evidence[-args.events :]:
         rows.append(
             (
                 item.timestamp.replace("T", " ").replace("Z", ""),
@@ -2496,7 +2898,7 @@ def cmd_verify(args: argparse.Namespace) -> None:
 
 
 def cmd_discover(args: argparse.Namespace) -> None:
-    report = inspect_binary("Codex CLI", preferred_codex_bin(args.codex_bin))
+    report = inspect_binary("Codex CLI", require_codex_bin(args.codex_bin))
     if not report.features:
         die(f"No feature registry available for {report.label}: {report.error or 'unknown error'}")
     if JSON_OUTPUT:
@@ -2761,7 +3163,7 @@ def apply_feature_changes(
     command: str,
     changes: list[FeatureChange],
     paths: Paths,
-    codex_bin: Path,
+    codex_bin: Path | None,
     dry_run: bool = False,
 ) -> None:
     for change in changes:
@@ -2779,7 +3181,7 @@ def apply_feature_changes(
                 "dry_run": dry_run,
                 "changed": not dry_run,
                 "backup": str(backup) if backup else None,
-                "codex_binary": str(codex_bin),
+                "codex_binary": str(codex_bin) if codex_bin else None,
                 "config": str(paths.config),
                 "features": [
                     {
@@ -2915,10 +3317,11 @@ def cmd_select(args: argparse.Namespace) -> None:
     if JSON_OUTPUT:
         die("`select` is interactive. Use `list --json` plus `enable --dry-run`/`disable --dry-run` for automation.")
     paths = resolve_paths()
-    codex_bin = preferred_codex_bin(args.codex_bin)
+    codex_bin = optional_codex_bin(args.codex_bin)
     config = parse_toml_light(read_config(paths))
-    registry = inspect_binary("Codex", codex_bin).features
-    selectable = [feature for feature in CURATED_FEATURES if feature.selectable]
+    registry = codex_registry_with_cache(inspect_binary("Codex", codex_bin))
+    catalog = codex_features_from_registry(registry, include_all=bool(getattr(args, "all", False)))
+    selectable = [feature for feature in catalog if feature.selectable]
 
     if sys.stdin.isatty() and sys.stdout.isatty():
         try:
@@ -2932,7 +3335,7 @@ def cmd_select(args: argparse.Namespace) -> None:
             status_line("warn", "Checklist unavailable", str(exc))
 
     banner("Interactive Codex control selection. Nothing changes until the final confirmation.")
-    render_feature_catalog(config, registry, numbered=True)
+    render_feature_catalog(config, registry, numbered=True, features=catalog)
 
     section("Selection")
     say_wrapped("Enter feature numbers or names separated by commas/spaces. Press Enter to cancel.", indent="  ")
@@ -2972,30 +3375,33 @@ def cmd_select(args: argparse.Namespace) -> None:
 
 
 def cmd_enable(args: argparse.Namespace) -> None:
+    codex_bin = optional_codex_bin(args.codex_bin)
+    registry = codex_registry_with_cache(inspect_binary("Codex", codex_bin))
     features = []
     for name in args.features:
-        feature = FEATURE_BY_NAME.get(name)
+        feature = codex_feature_lookup(name, registry)
         if not feature:
-            die(f"Unknown control: {name}. Run `lab-kit codex list`.")
+            die(f"Unknown control: {name}. Run `labkit codex list`.")
         if not feature.selectable:
             die(f"{name} is reference-only and cannot be enabled by this CLI.")
         features.append(feature)
-    enable_features(features, resolve_paths(), preferred_codex_bin(args.codex_bin), dry_run=args.dry_run)
+    enable_features(features, resolve_paths(), codex_bin, dry_run=args.dry_run)
 
 
-def enable_features(features: list[Feature], paths: Paths, codex_bin: Path, dry_run: bool = False) -> None:
+def enable_features(features: list[Feature], paths: Paths, codex_bin: Path | None, dry_run: bool = False) -> None:
     changes = [FeatureChange(feature=feature, enabled=True) for feature in features]
     apply_feature_changes("enable", changes, paths, codex_bin, dry_run=dry_run)
 
 
 def cmd_disable(args: argparse.Namespace) -> None:
     paths = resolve_paths()
-    codex_bin = preferred_codex_bin(args.codex_bin)
+    codex_bin = optional_codex_bin(args.codex_bin)
+    registry = codex_registry_with_cache(inspect_binary("Codex", codex_bin))
     features = []
     for name in args.features:
-        feature = FEATURE_BY_NAME.get(name)
+        feature = codex_feature_lookup(name, registry)
         if not feature:
-            die(f"Unknown control: {name}. Run `lab-kit codex list`.")
+            die(f"Unknown control: {name}. Run `labkit codex list`.")
         if feature.kind in {"catalog", "manual"}:
             die(f"{feature.name} cannot be disabled automatically by this CLI.")
         features.append(feature)
@@ -3036,6 +3442,59 @@ def cmd_codex_disable(args: argparse.Namespace) -> None:
     return cmd_disable(args)
 
 
+def cmd_update_features(args: argparse.Namespace) -> None:
+    results: dict[str, Any] = {"command": "update-features", "ok": True, "data_home": str(user_data_home())}
+
+    if not args.skip_codex:
+        codex_bin = optional_codex_bin(args.codex_bin)
+        if codex_bin:
+            report = inspect_binary("Codex CLI", codex_bin)
+            path = cached_codex_registry_path()
+            write_cached_json(
+                path,
+                {
+                    "updated_at": datetime.now().isoformat(timespec="seconds"),
+                    "binary": binary_report_data(report),
+                    "features": registry_data(report.features, include_all=True),
+                },
+            )
+            results["codex"] = {"ok": bool(report.features), "path": str(path), "feature_count": len(report.features)}
+        else:
+            results["codex"] = {"ok": False, "path": None, "error": "codex binary not found"}
+
+    if not args.skip_claude:
+        schema_url = os.environ.get("LABKIT_CLAUDE_SCHEMA_URL", CLAUDE_SCHEMA_URL)
+        schema = fetch_json_url(schema_url)
+        path = cached_claude_schema_path()
+        write_cached_json(path, schema)
+        results["claude"] = {
+            "ok": True,
+            "path": str(path),
+            "schema_url": schema_url,
+            "top_level_settings": len(schema_properties(schema)),
+            "env_settings": len(schema_env_properties(schema)),
+        }
+
+    if JSON_OUTPUT:
+        emit_json(results)
+        return
+
+    banner("Refresh Lab Kit feature knowledge from local binaries and official schemas.")
+    section("Data")
+    kv("home", results["data_home"])
+    if "codex" in results:
+        codex = results["codex"]
+        status_line("ok" if codex["ok"] else "warn", "Codex registry", codex.get("path") or codex.get("error"))
+        if codex.get("feature_count") is not None:
+            kv("features", codex["feature_count"])
+    if "claude" in results:
+        claude = results["claude"]
+        status_line("ok", "Claude schema", claude["path"])
+        kv("official schema", claude["schema_url"])
+        kv("top-level settings", claude["top_level_settings"])
+        kv("env settings", claude["env_settings"])
+
+
 def cmd_claude_code_check(args: argparse.Namespace) -> None:
     paths = resolve_claude_paths(args.scope)
     settings = read_json_file(paths.settings)
@@ -3068,47 +3527,99 @@ def cmd_claude_code_check(args: argparse.Namespace) -> None:
     if report.get("error"):
         kv("note", warning(report["error"]))
     section("Next")
-    status_line("info", "Review Claude Code controls", "`lab-kit claude-code list`")
-    status_line("info", "Open Claude Code checklist", "`lab-kit claude-code select`")
+    status_line("info", "Review Claude Code controls", "`labkit claude-code list`")
+    status_line("info", "Open Claude Code checklist", "`labkit claude-code select`")
 
 
 def cmd_claude_code_list(args: argparse.Namespace) -> None:
     paths = resolve_claude_paths(args.scope)
     settings = read_json_file(paths.settings)
     state_getter = lambda feature: claude_feature_state(feature, settings)
+    include_all = bool(getattr(args, "all", False))
+    catalog = claude_features(settings, include_all=include_all)
+    schema, schema_source = load_claude_schema()
     if JSON_OUTPUT:
         emit_json(
             {
                 "command": "claude-code list",
                 "scope": paths.scope,
+                "mode": "all" if include_all else "curated",
                 "settings": str(paths.settings),
-                "features": feature_catalog_data_for(CLAUDE_FEATURES, state_getter),
+                "schema": {
+                    "url": CLAUDE_SCHEMA_URL,
+                    "source": schema_source,
+                    "top_level_settings": len(schema_properties(schema)),
+                    "env_settings": len(schema_env_properties(schema)),
+                },
+                "features": feature_catalog_data_for(catalog, state_getter),
             }
         )
         return
 
     banner("Documented Claude Code controls. Read-only view; nothing changes from this command.")
-    render_feature_catalog({}, {}, numbered=True, features=CLAUDE_FEATURES, state_getter=state_getter)
+    if not include_all:
+        status_line("info", "Curated view", "use `labkit claude-code list --all` to include schema and settings-file keys")
+    render_feature_catalog({}, {}, numbered=True, features=catalog, state_getter=state_getter)
 
 
-def selected_claude_features(names: list[str]) -> list[Feature]:
+def cmd_claude_code_discover(args: argparse.Namespace) -> None:
+    paths = resolve_claude_paths(args.scope)
+    settings = read_json_file(paths.settings)
+    schema, schema_source = load_claude_schema()
+    catalog = claude_features(settings, include_all=True)
+    state_getter = lambda feature: claude_feature_state(feature, settings)
+
+    if JSON_OUTPUT:
+        emit_json(
+            {
+                "command": "claude-code discover",
+                "scope": paths.scope,
+                "settings": str(paths.settings),
+                "schema": {
+                    "url": CLAUDE_SCHEMA_URL,
+                    "source": schema_source,
+                    "top_level_settings": len(schema_properties(schema)),
+                    "env_settings": len(schema_env_properties(schema)),
+                },
+                "features": feature_catalog_data_for(catalog, state_getter),
+                "settings_keys": sorted(flatten_settings_keys(settings)),
+            }
+        )
+        return
+
+    banner("Claude Code curated controls plus schema and settings-file discoveries.")
+    section("Source")
+    kv("settings", paths.settings)
+    kv("schema", schema_source)
+    kv("official schema", CLAUDE_SCHEMA_URL)
+    render_feature_catalog({}, {}, numbered=False, features=catalog, state_getter=state_getter)
+
+
+def cmd_claude_discover(args: argparse.Namespace) -> None:
+    return cmd_claude_code_discover(args)
+
+
+def selected_claude_features(names: list[str], settings: dict[str, Any]) -> list[Feature]:
     features = []
     for name in names:
-        feature = CLAUDE_FEATURE_BY_NAME.get(name)
+        feature = claude_feature_lookup(name, settings)
         if not feature:
-            die(f"Unknown Claude Code control: {name}. Run `lab-kit claude-code list`.")
+            die(f"invalid choice: {name!r}. Run `labkit claude-code list --all`.")
         if not feature.selectable:
-            die(f"{name} is reference-only and cannot be changed by this CLI.")
+            die(f"invalid choice: {name!r} is reference-only and cannot be changed by this CLI.")
         features.append(feature)
     return features
 
 
 def cmd_claude_code_select(args: argparse.Namespace) -> None:
     if JSON_OUTPUT:
-        die("`claude-code select` is interactive. Use `claude-code list --json` plus `claude-code enable --dry-run`/`claude-code disable --dry-run` for automation.")
+        die(
+            "`claude-code select` is interactive. Use `claude-code list --json` plus `claude-code enable --dry-run`/`claude-code disable --dry-run` for automation."
+        )
     paths = resolve_claude_paths(args.scope)
     settings = read_json_file(paths.settings)
-    selectable = [feature for feature in CLAUDE_FEATURES if feature.selectable]
+    catalog = claude_features(settings, include_all=bool(getattr(args, "all", False)))
+    selectable = [feature for feature in catalog if feature.selectable]
     state_getter = lambda feature: claude_feature_state(feature, settings)
     planner = lambda chosen, target: planned_changes_for_target(
         chosen,
@@ -3131,7 +3642,7 @@ def cmd_claude_code_select(args: argparse.Namespace) -> None:
             status_line("warn", "Checklist unavailable", str(exc))
 
     banner("Interactive Claude Code control selection. Nothing changes until the final confirmation.")
-    render_feature_catalog({}, {}, numbered=True, features=CLAUDE_FEATURES, state_getter=state_getter)
+    render_feature_catalog({}, {}, numbered=True, features=catalog, state_getter=state_getter)
     section("Selection")
     say_wrapped("Enter feature numbers or names separated by commas/spaces. Press Enter to cancel.", indent="  ")
     raw = ask("  choose> ", Style.BOLD, Style.YELLOW).strip()
@@ -3164,7 +3675,7 @@ def cmd_claude_code_enable(args: argparse.Namespace) -> None:
     state_getter = lambda feature: claude_feature_state(feature, settings)
     changes = [
         FeatureChange(feature=feature, enabled=True, current_state=state_getter(feature)[0], current_source=state_getter(feature)[1])
-        for feature in selected_claude_features(args.features)
+        for feature in selected_claude_features(args.features, settings)
     ]
     apply_claude_feature_changes("enable", changes, paths, dry_run=args.dry_run)
 
@@ -3175,7 +3686,7 @@ def cmd_claude_code_disable(args: argparse.Namespace) -> None:
     state_getter = lambda feature: claude_feature_state(feature, settings)
     changes = [
         FeatureChange(feature=feature, enabled=False, current_state=state_getter(feature)[0], current_source=state_getter(feature)[1])
-        for feature in selected_claude_features(args.features)
+        for feature in selected_claude_features(args.features, settings)
     ]
     apply_claude_feature_changes("disable", changes, paths, dry_run=args.dry_run)
 
@@ -3211,17 +3722,20 @@ def polish_help(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = polish_help(argparse.ArgumentParser(
-        prog="lab-kit",
-        description="Inspect and manage local Codex CLI and Claude Code controls.",
-        formatter_class=help_formatter,
-    ))
+    parser = polish_help(
+        argparse.ArgumentParser(
+            prog="labkit",
+            description="Inspect and manage local Codex CLI and Claude Code controls.",
+            formatter_class=help_formatter,
+        )
+    )
     parser.add_argument("--codex-bin", help="Path to a Codex CLI binary. Defaults to `codex` on PATH.")
     parser.add_argument("--claude-bin", help="Path to a Claude Code binary. Defaults to `claude` on PATH.")
     parser.add_argument("--no-color", action="store_true", help="Disable ANSI color output.")
     parser.add_argument("--no-progress", action="store_true", help="Disable progress spinners.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON where supported.")
-    subparsers = parser.add_subparsers(dest="command", required=True, metavar="{codex,claude-code}")
+    parser.add_argument("--version", "-V", action="version", version=f"%(prog)s {package_version()}")
+    subparsers = parser.add_subparsers(dest="command", required=True, metavar="{codex,claude-code,update-features}")
 
     def command_parser(subparsers_: argparse._SubParsersAction, name: str, **kwargs: Any) -> argparse.ArgumentParser:
         hidden = kwargs.get("help") is argparse.SUPPRESS
@@ -3247,6 +3761,7 @@ def build_parser() -> argparse.ArgumentParser:
         add_json(c_doctor)
         c_doctor.set_defaults(func=cmd_codex_check)
         c_list = command_parser(codex_subparsers, "list", help="Show Codex controls grouped by area.")
+        c_list.add_argument("--all", action="store_true", help="Include every available registry flag, not just recommended controls.")
         add_json(c_list)
         c_list.set_defaults(func=cmd_codex_list)
         c_status = command_parser(codex_subparsers, "status", help=argparse.SUPPRESS)
@@ -3263,18 +3778,19 @@ def build_parser() -> argparse.ArgumentParser:
         add_json(c_discover)
         c_discover.set_defaults(func=cmd_codex_discover)
         c_select = command_parser(codex_subparsers, "select", help="Open the interactive Codex checklist.")
+        c_select.add_argument("--all", action="store_true", help="Include every available registry flag in the selector.")
         add_json(c_select)
         c_select.set_defaults(func=cmd_codex_select)
         c_enable = command_parser(codex_subparsers, "enable", help="Enable explicitly named Codex controls.")
         c_enable.add_argument("--dry-run", action="store_true", help="Preview changes without writing config.")
         add_json(c_enable)
-        c_enable.add_argument("features", nargs="+", metavar="control-id", choices=sorted(feature.name for feature in CURATED_FEATURES if feature.selectable))
+        c_enable.add_argument("features", nargs="+", metavar="control-id")
         c_enable._positionals.title = "Arguments"
         c_enable.set_defaults(func=cmd_codex_enable)
         c_disable = command_parser(codex_subparsers, "disable", help="Disable explicitly named Codex controls.")
         c_disable.add_argument("--dry-run", action="store_true", help="Preview changes without writing config.")
         add_json(c_disable)
-        c_disable.add_argument("features", nargs="+", metavar="control-id", choices=sorted(feature.name for feature in CURATED_FEATURES if feature.kind in {"feature", "top"}))
+        c_disable.add_argument("features", nargs="+", metavar="control-id")
         c_disable._positionals.title = "Arguments"
         c_disable.set_defaults(func=cmd_codex_disable)
         if alias_mode:
@@ -3284,11 +3800,13 @@ def build_parser() -> argparse.ArgumentParser:
         claude_subparsers = parent.add_subparsers(
             dest=f"{alias.replace('-', '_')}_command",
             required=True,
-            metavar="{check,list,select,enable,disable}",
+            metavar="{check,list,discover,select,enable,disable}",
         )
 
         def add_claude_scope(parser_: argparse.ArgumentParser) -> None:
-            parser_.add_argument("--scope", choices=["user", "project", "local"], default="user", help="Claude Code settings scope to read/write.")
+            parser_.add_argument(
+                "--scope", choices=["user", "project", "local"], default="user", help="Claude Code settings scope to read/write."
+            )
 
         cc_check = command_parser(claude_subparsers, "check", help="Check Claude Code installation and settings.")
         add_claude_scope(cc_check)
@@ -3296,29 +3814,41 @@ def build_parser() -> argparse.ArgumentParser:
         cc_check.set_defaults(func=cmd_claude_code_check if alias == "claude-code" else cmd_claude_check)
         cc_list = command_parser(claude_subparsers, "list", help="Show documented Claude Code controls.")
         add_claude_scope(cc_list)
+        cc_list.add_argument("--all", action="store_true", help="Include official schema keys and settings-file discoveries.")
         add_json(cc_list)
         cc_list.set_defaults(func=cmd_claude_code_list if alias == "claude-code" else cmd_claude_list)
+        cc_discover = command_parser(claude_subparsers, "discover", help="Show curated, schema, and settings-file Claude Code keys.")
+        add_claude_scope(cc_discover)
+        add_json(cc_discover)
+        cc_discover.set_defaults(func=cmd_claude_code_discover if alias == "claude-code" else cmd_claude_discover)
         cc_select = command_parser(claude_subparsers, "select", help="Open the interactive Claude Code checklist.")
         add_claude_scope(cc_select)
+        cc_select.add_argument("--all", action="store_true", help="Include official schema keys in the selector.")
         add_json(cc_select)
         cc_select.set_defaults(func=cmd_claude_code_select if alias == "claude-code" else cmd_claude_select)
         cc_enable = command_parser(claude_subparsers, "enable", help="Enable explicitly named Claude Code controls.")
         add_claude_scope(cc_enable)
         cc_enable.add_argument("--dry-run", action="store_true", help="Preview changes without writing settings.")
         add_json(cc_enable)
-        cc_enable.add_argument("features", nargs="+", metavar="control-id", choices=sorted(feature.name for feature in CLAUDE_FEATURES if feature.selectable))
+        cc_enable.add_argument("features", nargs="+", metavar="control-id")
         cc_enable._positionals.title = "Arguments"
         cc_enable.set_defaults(func=cmd_claude_code_enable if alias == "claude-code" else cmd_claude_enable)
         cc_disable = command_parser(claude_subparsers, "disable", help="Disable explicitly named Claude Code controls.")
         add_claude_scope(cc_disable)
         cc_disable.add_argument("--dry-run", action="store_true", help="Preview changes without writing settings.")
         add_json(cc_disable)
-        cc_disable.add_argument("features", nargs="+", metavar="control-id", choices=sorted(feature.name for feature in CLAUDE_FEATURES if feature.selectable))
+        cc_disable.add_argument("features", nargs="+", metavar="control-id")
         cc_disable._positionals.title = "Arguments"
         cc_disable.set_defaults(func=cmd_claude_code_disable if alias == "claude-code" else cmd_claude_disable)
 
     codex = command_parser(subparsers, "codex", help="Inspect and manage Codex CLI controls.")
     add_codex_commands(codex)
+
+    update_features = command_parser(subparsers, "update-features", help="Refresh cached feature knowledge from official sources.")
+    update_features.add_argument("--skip-codex", action="store_true", help="Do not refresh the Codex registry cache.")
+    update_features.add_argument("--skip-claude", action="store_true", help="Do not refresh the Claude Code schema cache.")
+    add_json(update_features)
+    update_features.set_defaults(func=cmd_update_features)
 
     check = command_parser(subparsers, "check", help=argparse.SUPPRESS)
     add_json(check)
@@ -3327,6 +3857,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_json(doctor)
     doctor.set_defaults(func=cmd_check)
     list_parser = command_parser(subparsers, "list", help=argparse.SUPPRESS)
+    list_parser.add_argument("--all", action="store_true", help="Include every available registry flag, not just recommended controls.")
     add_json(list_parser)
     list_parser.set_defaults(func=cmd_list)
     status = command_parser(subparsers, "status", help=argparse.SUPPRESS)
@@ -3343,18 +3874,19 @@ def build_parser() -> argparse.ArgumentParser:
     add_json(discover)
     discover.set_defaults(func=cmd_discover)
     select = command_parser(subparsers, "select", help=argparse.SUPPRESS)
+    select.add_argument("--all", action="store_true", help="Include every available registry flag in the selector.")
     add_json(select)
     select.set_defaults(func=cmd_select)
     enable = command_parser(subparsers, "enable", help=argparse.SUPPRESS)
     enable.add_argument("--dry-run", action="store_true", help="Preview changes without writing config.")
     add_json(enable)
-    enable.add_argument("features", nargs="+", metavar="control-id", choices=sorted(feature.name for feature in CURATED_FEATURES if feature.selectable))
+    enable.add_argument("features", nargs="+", metavar="control-id")
     enable._positionals.title = "Arguments"
     enable.set_defaults(func=cmd_enable)
     disable = command_parser(subparsers, "disable", help=argparse.SUPPRESS)
     disable.add_argument("--dry-run", action="store_true", help="Preview changes without writing config.")
     add_json(disable)
-    disable.add_argument("features", nargs="+", metavar="control-id", choices=sorted(feature.name for feature in CURATED_FEATURES if feature.kind in {"feature", "top"}))
+    disable.add_argument("features", nargs="+", metavar="control-id")
     disable._positionals.title = "Arguments"
     disable.set_defaults(func=cmd_disable)
 
@@ -3383,7 +3915,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except KeyboardInterrupt:
         if JSON_OUTPUT:
-            print(json.dumps({"ok": False, "error": {"type": "KeyboardInterrupt", "message": "interrupted"}}, sort_keys=True), file=sys.stderr)
+            print(
+                json.dumps({"ok": False, "error": {"type": "KeyboardInterrupt", "message": "interrupted"}}, sort_keys=True), file=sys.stderr
+            )
         else:
             print("interrupted", file=sys.stderr)
         return 130
