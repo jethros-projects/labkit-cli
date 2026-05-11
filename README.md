@@ -4,6 +4,8 @@
 
 Power up Codex CLI and Claude Code with Lab Kit CLI.
 
+Current version: 0.3.0.
+
 Lab Kit CLI is for people who use coding agents every day and want easier access to the experimental, preview, and locally gated controls already present in their installed tools. Instead of digging through config files or guessing environment variables, run one command, review the available controls, and choose what should be active.
 
 It supports Codex CLI and Claude Code. It backs up files before editing. It does not auto-enable anything, and it cannot grant account access, paid-plan access, model access, or server-side rollouts.
@@ -86,6 +88,8 @@ Codex support is primarily dynamic. Lab Kit reads the live registry from `codex 
 
 Claude Code support is curated plus schema-driven. The hand-curated list remains the default because it has the best descriptions and safe enable/disable semantics. `list --all` and `discover` merge that list with the official JSON Schema from [SchemaStore](https://json.schemastore.org/claude-code-settings.json), plus any extra keys already present in the selected `settings.json`.
 
+Claude leak and research-preview coverage is evidence-ranked. Publicly documented controls such as Agent View, voice dictation, auto permission mode, channels, Ultraplan, and Ultrareview include dependency and limitation notes. Leak-only or unsafe internal names such as KAIROS, Auto-Dream, Undercover Mode, and command-injection bypasses are hidden from the default view, shown in `--all` / `discover` / `info`, and marked reference-only so Lab Kit will not write unsupported toggles.
+
 Run this periodically to refresh the local cache:
 
 ```bash
@@ -114,6 +118,8 @@ labkit claude-code list --all --json
 For Codex, `info` combines the live registry with `lab_kit/data/codex_feature_metadata.json`, including known upstream dependencies such as `enable_fanout` implying `multi_agent` and `code_mode_only` implying `code_mode`. For the `1m-context` control, `verify --strict` checks the config layer, local model catalog, Codex binary model view, and recent session logs.
 
 For Claude Code, `info` combines curated metadata, SchemaStore keys, and settings-file discoveries. Lab Kit records where verification stops: it can prove the file value, but account entitlement, provider IAM, managed policy precedence, and live context/model behavior require Claude Code runtime checks such as `/status`, `/context`, `/memory`, `/hooks`, `/mcp`, `/permissions`, or `/model`.
+
+For leaked Claude Code controls, `info` also records known non-working or non-public status. For example, the old `--enable-auto-mode` flag is marked removed, `USER_TYPE=ant` is marked as an internal path that should not be treated as locally enabling hidden behavior, and leak-only safety-bypass names are blocking/reference-only.
 
 ## How To Stay Up To Date
 

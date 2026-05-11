@@ -468,19 +468,25 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["binary"]["version"], "2.1.999 (Claude Code)")
         self.assertEqual(data["paths"]["home"], str(self.claude_home))
-        self.assertEqual(len(data["features"]), 119)
+        self.assertEqual(len(data["features"]), 124)
 
     def test_claude_list_json_exposes_full_catalog_and_polished_copy(self) -> None:
         data = self.run_json("claude-code", "list")
-        self.assertEqual(len(data["features"]), 119)
+        self.assertEqual(len(data["features"]), 124)
         self.assertEqual(data["mode"], "curated")
-        self.assertEqual(sum(1 for feature in data["features"] if feature["selectable"]), 115)
+        self.assertEqual(sum(1 for feature in data["features"] if feature["selectable"]), 120)
         features = {feature["name"]: feature for feature in data["features"]}
         self.assertEqual(features["auto-memory"]["title"], "Auto Memory")
         self.assertEqual(features["auto-memory"]["description"], "Reads and writes project memory between sessions.")
         self.assertTrue(features["auto-memory"]["dependencies"])
         self.assertTrue(features["auto-memory"]["limitations"])
         self.assertTrue(features["auto-memory"]["verification"])
+        self.assertIn("agent-view", features)
+        self.assertIn("voice-dictation", features)
+        self.assertIn("auto-permissions", features)
+        self.assertIn("channels", features)
+        self.assertNotIn("kairos", features)
+        self.assertNotIn("ultraplan", features)
         self.assertEqual(features["1m-context"]["status"], "on")
         self.assertEqual(features["agent-teams"]["status"], "off")
 
@@ -501,6 +507,12 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertIn("custom-boolean", features)
         self.assertTrue(features["custom-boolean"]["limitations"])
         self.assertIn("env-labkit-private-flag", features)
+        self.assertIn("kairos", features)
+        self.assertFalse(features["kairos"]["selectable"])
+        self.assertIn("ultraplan", features)
+        self.assertFalse(features["ultraplan"]["selectable"])
+        self.assertIn("removed-auto-mode-flag", features)
+        self.assertEqual(features["removed-auto-mode-flag"]["stage"], "removed")
 
     def test_claude_info_explains_curated_and_schema_controls(self) -> None:
         curated = self.run_json("claude-code", "info", "auto-memory")
@@ -515,6 +527,18 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertIn("Dependencies", text)
         self.assertIn("Limitations", text)
         self.assertIn("Verification", text)
+        self.assertIn("Sources", text)
+
+    def test_claude_leaked_feature_info_marks_reference_only_status(self) -> None:
+        kairos = self.run_json("claude-code", "info", "kairos")
+        self.assertEqual(kairos["feature"]["name"], "kairos")
+        self.assertFalse(kairos["feature"]["selectable"])
+        self.assertTrue(any(item["severity"] == "blocking" for item in kairos["feature"]["limitations"]))
+        self.assertTrue(any("techsy.io" in item.get("url", "") for item in kairos["feature"]["sources"]))
+
+        removed = self.run_json("claude-code", "info", "removed-auto-mode-flag")
+        self.assertEqual(removed["feature"]["stage"], "removed")
+        self.assertTrue(any("removed" in item["detail"] for item in removed["feature"]["limitations"]))
 
     def test_claude_schema_derived_boolean_can_be_changed(self) -> None:
         self.run_json("claude-code", "enable", "include-co-authored-by")
@@ -563,6 +587,26 @@ class LabKitE2ETest(unittest.TestCase):
         self.run_json("claude-code", "disable", "thinking")
         data = self.claude_settings()
         self.assertIs(data["alwaysThinkingEnabled"], False)
+
+    def test_claude_experimental_settings_write_nested_values(self) -> None:
+        self.run_json("claude-code", "enable", "voice-dictation")
+        data = self.claude_settings()
+        self.assertIs(data["voice"]["enabled"], True)
+        self.run_json("claude-code", "enable", "voice-tap-mode")
+        data = self.claude_settings()
+        self.assertEqual(data["voice"]["mode"], "tap")
+        self.run_json("claude-code", "enable", "auto-permissions")
+        data = self.claude_settings()
+        self.assertEqual(data["permissions"]["defaultMode"], "auto")
+        self.run_json("claude-code", "disable", "auto-permissions")
+        data = self.claude_settings()
+        self.assertEqual(data["permissions"]["defaultMode"], "default")
+
+    def test_claude_leaked_reference_controls_cannot_be_enabled(self) -> None:
+        result = self.run_lab("claude-code", "enable", "kairos", "--json", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("reference-only", result.stderr)
+        self.assertFalse((self.claude_home / "settings.json").exists())
 
     def test_claude_project_and_local_scopes_write_project_files(self) -> None:
         self.run_json("claude-code", "enable", "--scope", "project", "agent-teams")
