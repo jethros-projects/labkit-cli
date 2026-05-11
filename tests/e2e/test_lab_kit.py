@@ -412,6 +412,11 @@ class LabKitE2ETest(unittest.TestCase):
         self.run_json("codex", "disable", "goals")
         self.assertRegex(self.codex_config_text(), r"(?m)^goals = false$")
 
+    def test_codex_select_fallback_can_disable_enabled_control(self) -> None:
+        (self.codex_home / "config.toml").write_text("[features]\ngoals = true\n", encoding="utf-8")
+        self.run_lab("codex", "select", input_text="goals\ninactive\napply\n")
+        self.assertRegex(self.codex_config_text(), r"(?m)^goals = false$")
+
     def test_codex_enable_and_disable_dynamic_registry_feature(self) -> None:
         self.run_json("codex", "enable", "remote-control")
         self.assertRegex(self.codex_config_text(), r"(?m)^remote_control = true$")
@@ -442,6 +447,20 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertTrue(verify["config_layer"]["ok"])
         self.assertTrue(verify["catalog_metadata"]["ok"])
         self.assertTrue(verify["runtime_evidence"]["ok"])
+
+    def test_codex_1m_context_disable_removes_catalog_override(self) -> None:
+        self.run_json("codex", "enable", "1m-context")
+        text = self.codex_config_text()
+        catalog_path = Path(re.search(r'(?m)^model_catalog_json = "([^"]+)"$', text).group(1))
+        self.assertTrue(catalog_path.exists())
+
+        data = self.run_json("codex", "disable", "1m-context")
+        self.assertFalse(data["features"][0]["enabled"])
+        text = self.codex_config_text()
+        self.assertNotRegex(text, r"(?m)^model_catalog_json = ")
+        self.assertNotRegex(text, r"(?m)^model_context_window = ")
+        self.assertNotRegex(text, r"(?m)^model_auto_compact_token_limit = ")
+        self.assertFalse(catalog_path.exists())
 
     def test_codex_verify_strict_fails_without_runtime_evidence(self) -> None:
         self.run_json("codex", "enable", "1m-context")
