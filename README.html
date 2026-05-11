@@ -100,6 +100,8 @@ python3 -m pip install -e .</code></pre>
 <p>Then run it from anywhere:</p>
 <pre><code class="language-bash">labkit codex select
 labkit claude-code select</code></pre>
+<p>Update the standalone install in place when you want the newest <code>main</code> build:</p>
+<pre><code class="language-bash">labkit update</code></pre>
 <p>The installer adds <code>~/.local/bin</code> to your shell profile when needed. Open a new terminal after install, or run this once in the current terminal:</p>
 <pre><code class="language-bash">export PATH=&quot;$HOME/.local/bin:$PATH&quot;</code></pre>
 <h2>Secure And Pinned Installs</h2>
@@ -134,6 +136,8 @@ labkit claude-code select
 labkit claude-code enable &lt;control-id&gt; [control-id...]
 labkit claude-code disable &lt;control-id&gt; [control-id...]
 
+labkit update
+labkit upgrade
 labkit update-features</code></pre>
 <p>Use <code>list</code> to see the marked controls. Use <code>list --all</code> or <code>discover</code> when you want schema, settings-file, or raw registry extras. Use <code>--risk high</code> to focus on high-risk and internal controls. Use <code>info &lt;control-id&gt;</code> or <code>list --details</code> when you need dependencies, limitations, verification steps, and primary-source links. Use <code>select</code> for the polished interactive flow.</p>
 <h2>Philosophy</h2>
@@ -171,11 +175,18 @@ labkit claude-code list --all --json</code></pre>
 <p>For leaked Claude Code controls, <code>info</code> also records known non-working or non-public status. For example, the old <code>--enable-auto-mode</code> flag is marked removed, <code>USER_TYPE=ant</code> is marked as an internal path that should not be treated as locally enabling hidden behavior, and leak-only safety-bypass names are blocking/reference-only.</p>
 <h2>How To Stay Up To Date</h2>
 <ul>
+<li>Run <code>labkit update</code> to reinstall the latest Lab Kit CLI from the GitHub <code>main</code> archive.</li>
+<li>Use <code>labkit upgrade</code> if that command name is easier to remember; it is an alias for <code>labkit update</code>.</li>
 <li>Run <code>labkit update-features</code> after upgrading Codex CLI or Claude Code.</li>
 <li>Use <code>labkit codex list --all</code> to inspect new Codex registry flags as soon as your installed binary exposes them.</li>
 <li>Use <code>labkit claude-code list --all</code> to inspect Claude Code settings from the official schema and your actual settings file.</li>
 <li>Keep pinned installer usage on an explicit <code>REF</code> so automation upgrades only when you choose a new branch, tag, or commit.</li>
 </ul>
+<p><code>labkit update</code> overwrites the standalone <code>labkit</code> launcher and adjacent <code>lab_kit</code> package in the install directory. It defaults to the current standalone install location, or <code>~/.local/bin</code> when running from a checkout or editable pip install. For pinned updates:</p>
+<pre><code class="language-bash">labkit update --ref &lt;commit-or-tag&gt; --sha256 &lt;sha256-of-github-archive&gt;</code></pre>
+<p>You normally do not need to uninstall first. To remove the standalone install completely:</p>
+<pre><code class="language-bash">rm -f ~/.local/bin/labkit ~/.local/bin/lab-kit
+rm -rf ~/.local/bin/lab_kit</code></pre>
 <h2>Safety Model</h2>
 <p>Read-only commands:</p>
 <pre><code class="language-bash">labkit codex check
@@ -192,6 +203,7 @@ labkit codex disable &lt;control-id&gt;
 labkit claude-code select
 labkit claude-code enable &lt;control-id&gt;
 labkit claude-code disable &lt;control-id&gt;
+labkit update
 labkit update-features</code></pre>
 <p>Config write commands back up the target file before editing it. After enabling controls, start a fresh Codex CLI or Claude Code session so the new config/settings are loaded.</p>
 <h2>Agent-Friendly</h2>
@@ -226,6 +238,12 @@ labkit claude-code enable --dry-run --json &lt;control-id&gt;</code></pre>
 <li>documented Claude Code <code>env</code> settings under the selected scope</li>
 <li><code>~/.local/share/labkit/claude-code-settings-schema.json</code> for optional schema cache</li>
 </ul>
+<p>Lab Kit self-update:</p>
+<ul>
+<li><code>~/.local/bin/labkit</code> or the selected install directory&#x27;s <code>labkit</code> launcher</li>
+<li>adjacent <code>lab_kit</code> package in that install directory</li>
+<li>legacy <code>lab-kit</code> launcher cleanup when present</li>
+</ul>
 <p>If your binaries live somewhere unusual:</p>
 <pre><code class="language-bash">labkit --codex-bin /path/to/codex codex check
 labkit --claude-bin /path/to/claude claude-code check</code></pre>
@@ -233,7 +251,7 @@ labkit --claude-bin /path/to/claude claude-code check</code></pre>
 <ul>
 <li><code>labkit</code> is the executable used from source checkouts and installer installs.</li>
 <li><code>lab_kit/cli.py</code> contains only argument parsing and command routing.</li>
-<li><code>lab_kit/models.py</code>, <code>ui.py</code>, <code>metadata.py</code>, <code>utils.py</code>, <code>codex.py</code>, and <code>claude.py</code> split shared models, terminal rendering, metadata merging, file/process helpers, and product-specific behavior.</li>
+<li><code>lab_kit/models.py</code>, <code>ui.py</code>, <code>metadata.py</code>, <code>utils.py</code>, <code>codex.py</code>, <code>claude.py</code>, and <code>self_update.py</code> split shared models, terminal rendering, metadata merging, file/process helpers, product-specific behavior, and standalone updater behavior.</li>
 <li><code>lab_kit/data/codex_feature_metadata.json</code> keeps Codex dynamic registry output readable and records smart markings, dependencies, limitations, verification steps, and source links without making coverage static.</li>
 <li><code>lab_kit/data/claude-code-settings-schema.json</code> is the bundled Claude Code schema snapshot used when no refreshed cache exists.</li>
 <li><code>lab_kit/data/claude_feature_metadata.json</code> overlays Claude Code controls with smart markings and docs-backed dependency/verification metadata while preserving schema-driven coverage.</li>

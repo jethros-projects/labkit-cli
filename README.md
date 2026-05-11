@@ -33,6 +33,12 @@ labkit codex select
 labkit claude-code select
 ```
 
+Update the standalone install in place when you want the newest `main` build:
+
+```bash
+labkit update
+```
+
 The installer adds `~/.local/bin` to your shell profile when needed. Open a new terminal after install, or run this once in the current terminal:
 
 ```bash
@@ -79,6 +85,8 @@ labkit claude-code select
 labkit claude-code enable <control-id> [control-id...]
 labkit claude-code disable <control-id> [control-id...]
 
+labkit update
+labkit upgrade
 labkit update-features
 ```
 
@@ -140,10 +148,25 @@ For leaked Claude Code controls, `info` also records known non-working or non-pu
 
 ## How To Stay Up To Date
 
+- Run `labkit update` to reinstall the latest Lab Kit CLI from the GitHub `main` archive.
+- Use `labkit upgrade` if that command name is easier to remember; it is an alias for `labkit update`.
 - Run `labkit update-features` after upgrading Codex CLI or Claude Code.
 - Use `labkit codex list --all` to inspect new Codex registry flags as soon as your installed binary exposes them.
 - Use `labkit claude-code list --all` to inspect Claude Code settings from the official schema and your actual settings file.
 - Keep pinned installer usage on an explicit `REF` so automation upgrades only when you choose a new branch, tag, or commit.
+
+`labkit update` overwrites the standalone `labkit` launcher and adjacent `lab_kit` package in the install directory. It defaults to the current standalone install location, or `~/.local/bin` when running from a checkout or editable pip install. For pinned updates:
+
+```bash
+labkit update --ref <commit-or-tag> --sha256 <sha256-of-github-archive>
+```
+
+You normally do not need to uninstall first. To remove the standalone install completely:
+
+```bash
+rm -f ~/.local/bin/labkit ~/.local/bin/lab-kit
+rm -rf ~/.local/bin/lab_kit
+```
 
 ## Safety Model
 
@@ -168,6 +191,7 @@ labkit codex disable <control-id>
 labkit claude-code select
 labkit claude-code enable <control-id>
 labkit claude-code disable <control-id>
+labkit update
 labkit update-features
 ```
 
@@ -212,6 +236,12 @@ Claude Code:
 - documented Claude Code `env` settings under the selected scope
 - `~/.local/share/labkit/claude-code-settings-schema.json` for optional schema cache
 
+Lab Kit self-update:
+
+- `~/.local/bin/labkit` or the selected install directory's `labkit` launcher
+- adjacent `lab_kit` package in that install directory
+- legacy `lab-kit` launcher cleanup when present
+
 If your binaries live somewhere unusual:
 
 ```bash
@@ -223,7 +253,7 @@ labkit --claude-bin /path/to/claude claude-code check
 
 - `labkit` is the executable used from source checkouts and installer installs.
 - `lab_kit/cli.py` contains only argument parsing and command routing.
-- `lab_kit/models.py`, `ui.py`, `metadata.py`, `utils.py`, `codex.py`, and `claude.py` split shared models, terminal rendering, metadata merging, file/process helpers, and product-specific behavior.
+- `lab_kit/models.py`, `ui.py`, `metadata.py`, `utils.py`, `codex.py`, `claude.py`, and `self_update.py` split shared models, terminal rendering, metadata merging, file/process helpers, product-specific behavior, and standalone updater behavior.
 - `lab_kit/data/codex_feature_metadata.json` keeps Codex dynamic registry output readable and records smart markings, dependencies, limitations, verification steps, and source links without making coverage static.
 - `lab_kit/data/claude-code-settings-schema.json` is the bundled Claude Code schema snapshot used when no refreshed cache exists.
 - `lab_kit/data/claude_feature_metadata.json` overlays Claude Code controls with smart markings and docs-backed dependency/verification metadata while preserving schema-driven coverage.

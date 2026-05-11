@@ -48,6 +48,7 @@ from .codex import (
 from .metadata import package_version
 from .models import CliError
 from .refresh import cmd_update_features
+from .self_update import cmd_self_update
 
 RISK_CHOICES = ["low", "medium", "high", "internal"]
 
@@ -76,7 +77,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-progress", action="store_true", help="Disable progress spinners.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON where supported.")
     parser.add_argument("--version", "-V", action="version", version=f"%(prog)s {package_version()}")
-    subparsers = parser.add_subparsers(dest="command", required=True, metavar="{codex,claude-code,update-features}")
+    subparsers = parser.add_subparsers(
+        dest="command",
+        required=True,
+        metavar="{codex,claude-code,update,upgrade,update-features}",
+    )
 
     def command_parser(subparsers_: argparse._SubParsersAction, name: str, **kwargs: Any) -> argparse.ArgumentParser:
         hidden = kwargs.get("help") is argparse.SUPPRESS
@@ -96,6 +101,17 @@ def build_parser() -> argparse.ArgumentParser:
             action="store_true",
             help="Compatibility flag; internal controls are already visible and marked.",
         )
+
+    def add_self_update_options(parser_: argparse.ArgumentParser, command: str) -> None:
+        parser_.add_argument("--ref", help="Branch, tag, or commit to install. Defaults to LABKIT_REF, REF, or main.")
+        parser_.add_argument("--archive-url", help="Install from an explicit tar.gz archive URL or local archive path.")
+        parser_.add_argument("--install-dir", help="Directory that contains the labkit executable. Defaults to the current install.")
+        parser_.add_argument("--sha256", help="Expected SHA256 for the downloaded archive.")
+        parser_.add_argument("--dry-run", action="store_true", help="Show the update plan without downloading or writing files.")
+        parser_.add_argument("--repo-owner", help=argparse.SUPPRESS)
+        parser_.add_argument("--repo-name", help=argparse.SUPPRESS)
+        add_json(parser_)
+        parser_.set_defaults(func=cmd_self_update, self_update_command=command)
 
     def add_codex_commands(parent: argparse.ArgumentParser) -> None:
         codex_subparsers = parent.add_subparsers(
@@ -213,6 +229,11 @@ def build_parser() -> argparse.ArgumentParser:
     update_features.add_argument("--skip-claude", action="store_true", help="Do not refresh the Claude Code schema cache.")
     add_json(update_features)
     update_features.set_defaults(func=cmd_update_features)
+
+    update = command_parser(subparsers, "update", help="Update Lab Kit CLI in place from GitHub.")
+    add_self_update_options(update, "update")
+    upgrade = command_parser(subparsers, "upgrade", help="Alias for `update`.")
+    add_self_update_options(upgrade, "upgrade")
 
     check = command_parser(subparsers, "check", help=argparse.SUPPRESS)
     add_json(check)

@@ -133,6 +133,21 @@ def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def make_labkit_archive(source_root: Path, archive_path: Path) -> None:
+    archive_root = archive_path.parent / "labkit-cli-main"
+    if archive_root.exists():
+        shutil.rmtree(archive_root)
+    archive_root.mkdir()
+    shutil.copy2(source_root / "labkit", archive_root / "labkit")
+    shutil.copytree(
+        source_root / "lab_kit",
+        archive_root / "lab_kit",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    with tarfile.open(archive_path, "w:gz") as archive:
+        archive.add(archive_root, arcname=archive_root.name)
+
+
 class LabKitE2ETest(unittest.TestCase):
     maxDiff = None
 
@@ -256,9 +271,10 @@ class LabKitE2ETest(unittest.TestCase):
 
     def test_top_level_help_is_short_and_namespaced(self) -> None:
         result = self.run_lab("--no-color", "--help")
-        self.assertIn("{codex,claude-code,update-features}", result.stdout)
+        self.assertIn("{codex,claude-code,update,upgrade,update-features}", result.stdout)
         self.assertIn("codex", result.stdout)
         self.assertIn("claude-code", result.stdout)
+        self.assertIn("update", result.stdout)
         self.assertNotIn("==SUPPRESS==", result.stdout)
         self.assertNotIn("./labkit", result.stdout)
 
@@ -337,6 +353,49 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("\x1b[", result.stdout)
         self.assertIn("current terminal:", result.stdout)
+
+    def test_update_installs_from_archive_and_removes_legacy_alias(self) -> None:
+        archive_path = self.tmp / "labkit.tar.gz"
+        make_labkit_archive(ROOT, archive_path)
+        install_dir = self.tmp / "self-update-bin"
+        install_dir.mkdir()
+        legacy = install_dir / "lab-kit"
+        legacy.write_text("old command\n", encoding="utf-8")
+
+        data = self.run_json("update", "--archive-url", archive_path.as_uri(), "--install-dir", str(install_dir))
+
+        installed = install_dir / "labkit"
+        self.assertTrue(data["ok"])
+        self.assertFalse(data["dry_run"])
+        self.assertEqual(data["command"], "update")
+        self.assertEqual(data["archive_url"], archive_path.as_uri())
+        self.assertTrue(installed.exists())
+        self.assertTrue((install_dir / "lab_kit" / "cli.py").exists())
+        self.assertFalse(legacy.exists())
+        self.assertTrue(os.access(installed, os.X_OK))
+        help_result = subprocess.run(
+            [str(installed), "--help"],
+            env=self.env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(help_result.returncode, 0, help_result.stderr)
+        self.assertIn("update", help_result.stdout)
+
+    def test_upgrade_dry_run_reports_plan_without_installing(self) -> None:
+        install_dir = self.tmp / "dry-run-update-bin"
+        archive_url = (self.tmp / "does-not-need-to-exist.tar.gz").as_uri()
+
+        data = self.run_json("upgrade", "--archive-url", archive_url, "--install-dir", str(install_dir), "--dry-run")
+
+        self.assertTrue(data["ok"])
+        self.assertTrue(data["dry_run"])
+        self.assertEqual(data["command"], "upgrade")
+        self.assertEqual(data["archive_url"], archive_url)
+        self.assertEqual(data["install_dir"], str(install_dir))
+        self.assertFalse((install_dir / "labkit").exists())
 
     def test_installer_verifies_pinned_archive_checksum(self) -> None:
         archive_root = self.tmp / "archive-root" / "labkit-cli-test"
