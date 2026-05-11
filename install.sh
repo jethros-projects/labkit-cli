@@ -2,12 +2,14 @@
 set -eu
 
 APP_NAME="Lab Kit CLI"
-BIN_NAME="lab-kit"
+BIN_NAME="labkit"
+LEGACY_BIN_NAME="lab-kit"
 REPO_OWNER="${REPO_OWNER:-jethros-projects}"
-REPO_NAME="${REPO_NAME:-lab-kit-cli}"
+REPO_NAME="${REPO_NAME:-labkit-cli}"
 REF="${REF:-main}"
 INSTALL_DIR="${INSTALL_DIR:-${HOME}/.local/bin}"
-SOURCE_URL="${SOURCE_URL:-https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REF}/${BIN_NAME}}"
+ARCHIVE_URL="${ARCHIVE_URL:-https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/${REF}.tar.gz}"
+EXPECTED_SHA256="${LABKIT_SHA256:-${SHA256:-}}"
 
 if [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != "dumb" ]; then
   BOLD="$(printf '\033[1m')"
@@ -68,9 +70,40 @@ download() {
   fi
 }
 
+verify_sha256() {
+  file="$1"
+  if [ -z "$EXPECTED_SHA256" ]; then
+    warn "SHA256 verification skipped; set LABKIT_SHA256 for pinned installs"
+    return
+  fi
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "$file" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 "$file" | awk '{print $1}')"
+  else
+    fail "missing sha256sum or shasum for checksum verification"
+  fi
+
+  if [ "$actual" != "$EXPECTED_SHA256" ]; then
+    fail "SHA256 mismatch for downloaded archive"
+  fi
+  ok "verified SHA256"
+}
+
+install_from_source_dir() {
+  source_dir="$1"
+  [ -f "${source_dir}/${BIN_NAME}" ] || fail "source archive is missing ${BIN_NAME}"
+  [ -d "${source_dir}/lab_kit" ] || fail "source archive is missing lab_kit package"
+
+  cp "${source_dir}/${BIN_NAME}" "$tmp_bin"
+  rm -rf "${INSTALL_DIR}/lab_kit"
+  cp -R "${source_dir}/lab_kit" "${INSTALL_DIR}/lab_kit"
+}
+
 profile_path() {
-  if [ -n "${LAB_KIT_PROFILE:-}" ]; then
-    printf '%s\n' "$LAB_KIT_PROFILE"
+  if [ -n "${LABKIT_PROFILE:-}" ]; then
+    printf '%s\n' "$LABKIT_PROFILE"
     return
   fi
 
@@ -97,7 +130,7 @@ profile_path() {
 
 add_path_to_profile() {
   profile="$1"
-  marker="# >>> lab-kit PATH >>>"
+  marker="# >>> labkit PATH >>>"
   shell_name="$(basename "${SHELL:-}")"
 
   mkdir -p "$(dirname "$profile")"
@@ -111,21 +144,21 @@ add_path_to_profile() {
   if [ "$shell_name" = "fish" ]; then
     cat >>"$profile" <<EOF
 
-# >>> lab-kit PATH >>>
+# >>> labkit PATH >>>
 if not contains "${INSTALL_DIR}" \$PATH
     set -gx PATH "${INSTALL_DIR}" \$PATH
 end
-# <<< lab-kit PATH <<<
+# <<< labkit PATH <<<
 EOF
   else
     cat >>"$profile" <<EOF
 
-# >>> lab-kit PATH >>>
+# >>> labkit PATH >>>
 case ":\$PATH:" in
   *":${INSTALL_DIR}:"*) ;;
   *) export PATH="${INSTALL_DIR}:\$PATH" ;;
 esac
-# <<< lab-kit PATH <<<
+# <<< labkit PATH <<<
 EOF
   fi
 
@@ -143,21 +176,35 @@ mkdir -p "$INSTALL_DIR"
 
 tmp_bin="${tmp_dir}/${BIN_NAME}"
 if [ -f "./${BIN_NAME}" ]; then
-  step "using local ./${BIN_NAME}"
-  cp "./${BIN_NAME}" "$tmp_bin"
+  step "using local checkout"
+  install_from_source_dir "."
 else
-  step "downloading ${SOURCE_URL}"
-  download "$SOURCE_URL" "$tmp_bin"
+  need_cmd tar
+  archive="${tmp_dir}/labkit-cli.tar.gz"
+  source_root="${tmp_dir}/source"
+  mkdir -p "$source_root"
+  step "downloading ${ARCHIVE_URL}"
+  download "$ARCHIVE_URL" "$archive"
+  verify_sha256 "$archive"
+  tar -xzf "$archive" -C "$source_root"
+  set -- "$source_root"/*
+  install_from_source_dir "$1"
 fi
 
 chmod +x "$tmp_bin"
 need_cmd python3
 step "validating executable"
-python3 -m py_compile "$tmp_bin"
+python3 -m py_compile "$tmp_bin" "${INSTALL_DIR}/lab_kit/cli.py"
 
 install_path="${INSTALL_DIR}/${BIN_NAME}"
 mv "$tmp_bin" "$install_path"
 chmod +x "$install_path"
+
+legacy_path="${INSTALL_DIR}/${LEGACY_BIN_NAME}"
+if [ -e "$legacy_path" ]; then
+  rm -f "$legacy_path"
+  ok "removed legacy ${legacy_path}"
+fi
 
 ok "installed ${install_path}"
 
@@ -170,8 +217,8 @@ case ":${PATH}:" in
     path_ready=0
     say ""
     warn "${BIN_NAME} is installed, but ${INSTALL_DIR} is not on PATH in this shell."
-    if [ "${LAB_KIT_NO_PATH_UPDATE:-0}" = "1" ]; then
-      warn "profile update skipped because LAB_KIT_NO_PATH_UPDATE=1"
+    if [ "${LABKIT_NO_PATH_UPDATE:-0}" = "1" ]; then
+      warn "profile update skipped because LABKIT_NO_PATH_UPDATE=1"
     else
       profile="$(profile_path)"
       add_path_to_profile "$profile"

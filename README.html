@@ -85,80 +85,100 @@
 <body>
   <main>
 <h1>Lab Kit CLI</h1>
-<p>Power up Codex CLI and Claude Code with Lab Kit CLI!</p>
+<p><a href="https://img.shields.io/badge/License-MIT-yellow.svg">![License: MIT</a>](LICENSE)</p>
+<p>Power up Codex CLI and Claude Code with Lab Kit CLI.</p>
 <p>Lab Kit CLI is for people who use coding agents every day and want easier access to the experimental, preview, and locally gated controls already present in their installed tools. Instead of digging through config files or guessing environment variables, run one command, review the available controls, and choose what should be active.</p>
-<p>It supports Codex CLI and Claude Code. It backs up files before editing. It does not auto-enable anything.</p>
-<p>Lab Kit cannot grant account access, paid-plan access, model access, or server-side rollouts. It only toggles controls your local CLI already knows about.</p>
+<p>It supports Codex CLI and Claude Code. It backs up files before editing. It does not auto-enable anything, and it cannot grant account access, paid-plan access, model access, or server-side rollouts.</p>
 <h2>Quick Start</h2>
-<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/jethros-projects/lab-kit-cli/main/install.sh | sh</code></pre>
+<p>Install with the shell installer:</p>
+<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/jethros-projects/labkit-cli/main/install.sh | sh</code></pre>
+<p>Or install from a checkout with pip:</p>
+<pre><code class="language-bash">git clone https://github.com/jethros-projects/labkit-cli.git
+cd labkit-cli
+python3 -m pip install -e .</code></pre>
 <p>Then run it from anywhere:</p>
-<pre><code class="language-bash">lab-kit codex select
-lab-kit claude-code select</code></pre>
+<pre><code class="language-bash">labkit codex select
+labkit claude-code select</code></pre>
 <p>The installer adds <code>~/.local/bin</code> to your shell profile when needed. Open a new terminal after install, or run this once in the current terminal:</p>
 <pre><code class="language-bash">export PATH=&quot;$HOME/.local/bin:$PATH&quot;</code></pre>
-<p>The selector lets you pick multiple active or inactive controls, then apply them together. Nothing changes until you confirm.</p>
-<h2>Why Use It</h2>
-<ul>
-<li>Turn on experimental agent controls without hand-editing config files.</li>
-<li>See Codex and Claude Code controls grouped by area.</li>
-<li>Enable or disable multiple controls in one guided flow.</li>
-<li>Preview changes with <code>--dry-run</code>.</li>
-<li>Use <code>--json</code> from scripts and other agents.</li>
-<li>Keep backups of config/settings before every write.</li>
-<li>Verify Codex runtime evidence for context-window changes.</li>
-</ul>
+<h2>Secure And Pinned Installs</h2>
+<p>Pin installs to a branch, tag, or commit with <code>REF</code>. For checksum verification, download the archive first, compute its SHA256, then pass that value to the installer:</p>
+<pre><code class="language-bash">REF=&lt;commit-or-tag&gt; \
+LABKIT_SHA256=&lt;sha256-of-github-archive&gt; \
+curl -fsSL https://raw.githubusercontent.com/jethros-projects/labkit-cli/main/install.sh | sh</code></pre>
+<p>Without <code>LABKIT_SHA256</code>, the installer still supports <code>REF</code>, but it will clearly note that checksum verification was skipped.</p>
 <h2>Core Commands</h2>
-<pre><code class="language-bash">lab-kit codex check
-lab-kit codex list
-lab-kit codex select
-lab-kit codex enable &lt;control-id&gt; [control-id...]
-lab-kit codex disable &lt;control-id&gt; [control-id...]
-lab-kit codex verify
+<pre><code class="language-bash">labkit --version
 
-lab-kit claude-code check
-lab-kit claude-code list
-lab-kit claude-code select
-lab-kit claude-code enable &lt;control-id&gt; [control-id...]
-lab-kit claude-code disable &lt;control-id&gt; [control-id...]</code></pre>
-<p>Use <code>list</code> to find control ids. Use <code>select</code> for the polished interactive flow.</p>
+labkit codex check
+labkit codex list
+labkit codex list --all
+labkit codex discover
+labkit codex select
+labkit codex enable &lt;control-id&gt; [control-id...]
+labkit codex disable &lt;control-id&gt; [control-id...]
+labkit codex verify --strict
+
+labkit claude-code check
+labkit claude-code list
+labkit claude-code list --all
+labkit claude-code discover
+labkit claude-code select
+labkit claude-code enable &lt;control-id&gt; [control-id...]
+labkit claude-code disable &lt;control-id&gt; [control-id...]
+
+labkit update-features</code></pre>
+<p>Use <code>list</code> to see the clean recommended controls. Use <code>list --all</code> or <code>discover</code> when you want the complete surface. Use <code>select</code> for the polished interactive flow.</p>
+<h2>100% Coverage Approach</h2>
+<p>Codex support is primarily dynamic. Lab Kit reads the live registry from <code>codex features list</code>, maps known flags through <code>lab_kit/data/codex_feature_metadata.json</code> for friendly titles and groups, and generates sensible controls for any new registry flag it has never seen before. The default view stays recommended and calm; <code>--all</code> shows every currently available registry flag, and <code>discover</code> shows the raw registry.</p>
+<p>Claude Code support is curated plus schema-driven. The hand-curated list remains the default because it has the best descriptions and safe enable/disable semantics. <code>list --all</code> and <code>discover</code> merge that list with the official JSON Schema from <a href="https://json.schemastore.org/claude-code-settings.json">SchemaStore</a>, plus any extra keys already present in the selected <code>settings.json</code>.</p>
+<p>Run this periodically to refresh the local cache:</p>
+<pre><code class="language-bash">labkit update-features</code></pre>
+<p>That command refreshes the Codex registry cache from the installed <code>codex</code> binary and the Claude Code schema cache from the official schema URL. If Codex is not installed, Lab Kit falls back to the curated Codex controls and any previously cached registry.</p>
+<h2>How To Stay Up To Date</h2>
+<ul>
+<li>Run <code>labkit update-features</code> after upgrading Codex CLI or Claude Code.</li>
+<li>Use <code>labkit codex list --all</code> to inspect new Codex registry flags as soon as your installed binary exposes them.</li>
+<li>Use <code>labkit claude-code list --all</code> to inspect Claude Code settings from the official schema and your actual settings file.</li>
+<li>Keep pinned installer usage on an explicit <code>REF</code> so automation upgrades only when you choose a new branch, tag, or commit.</li>
+</ul>
 <h2>Safety Model</h2>
 <p>Read-only commands:</p>
-<pre><code class="language-bash">lab-kit codex check
-lab-kit codex list
-lab-kit codex discover
-lab-kit codex verify
-lab-kit claude-code check
-lab-kit claude-code list</code></pre>
+<pre><code class="language-bash">labkit codex check
+labkit codex list
+labkit codex discover
+labkit codex verify
+labkit claude-code check
+labkit claude-code list
+labkit claude-code discover</code></pre>
 <p>Write commands:</p>
-<pre><code class="language-bash">lab-kit codex select
-lab-kit codex enable &lt;control-id&gt;
-lab-kit codex disable &lt;control-id&gt;
-lab-kit claude-code select
-lab-kit claude-code enable &lt;control-id&gt;
-lab-kit claude-code disable &lt;control-id&gt;</code></pre>
-<p>Write commands back up the target file before editing it. After enabling controls, start a fresh Codex CLI or Claude Code session so the new config/settings are loaded.</p>
+<pre><code class="language-bash">labkit codex select
+labkit codex enable &lt;control-id&gt;
+labkit codex disable &lt;control-id&gt;
+labkit claude-code select
+labkit claude-code enable &lt;control-id&gt;
+labkit claude-code disable &lt;control-id&gt;
+labkit update-features</code></pre>
+<p>Config write commands back up the target file before editing it. After enabling controls, start a fresh Codex CLI or Claude Code session so the new config/settings are loaded.</p>
 <h2>Agent-Friendly</h2>
 <p>Lab Kit works well for humans and for agents.</p>
-<pre><code class="language-bash">lab-kit codex list --json
-lab-kit codex enable --dry-run --json &lt;control-id&gt;
-lab-kit codex verify --strict
+<pre><code class="language-bash">labkit codex list --json
+labkit codex list --all --json
+labkit codex enable --dry-run --json &lt;control-id&gt;
+labkit codex verify --strict
 
-lab-kit claude-code list --json
-lab-kit claude-code enable --dry-run --json &lt;control-id&gt;</code></pre>
+labkit claude-code list --json
+labkit claude-code list --all --json
+labkit claude-code discover --json
+labkit claude-code enable --dry-run --json &lt;control-id&gt;</code></pre>
 <p>JSON mode disables color and progress output. Runtime errors are emitted as JSON on stderr.</p>
-<h2>Testing</h2>
-<p>Run the hermetic E2E suite:</p>
-<pre><code class="language-bash">tests/run_e2e.sh</code></pre>
-<p>Those tests execute the real <code>lab-kit</code> CLI against isolated temp homes and fake <code>codex</code> / <code>claude</code> binaries. That keeps CI deterministic and prevents tests from editing your real <code>~/.codex</code> or <code>~/.claude</code> files.</p>
-<p>Run optional live smoke tests against real installed binaries:</p>
-<pre><code class="language-bash">LAB_KIT_LIVE_E2E=1 tests/run_e2e.sh</code></pre>
-<p>Live smoke tests are read-only or dry-run only.</p>
 <h2>What It Touches</h2>
 <p>Codex:</p>
 <ul>
 <li><code>~/.codex/config.toml</code></li>
 <li>local model-catalog override used for the <code>1m-context</code> control</li>
 <li>recent Codex session logs for runtime verification</li>
+<li><code>~/.local/share/labkit/codex-features.json</code> for optional registry cache</li>
 </ul>
 <p>Claude Code:</p>
 <ul>
@@ -166,21 +186,32 @@ lab-kit claude-code enable --dry-run --json &lt;control-id&gt;</code></pre>
 <li><code>.claude/settings.json</code> with <code>--scope project</code></li>
 <li><code>.claude/settings.local.json</code> with <code>--scope local</code></li>
 <li>documented Claude Code <code>env</code> settings under the selected scope</li>
+<li><code>~/.local/share/labkit/claude-code-settings-schema.json</code> for optional schema cache</li>
 </ul>
 <p>If your binaries live somewhere unusual:</p>
-<pre><code class="language-bash">lab-kit --codex-bin /path/to/codex codex check
-lab-kit --claude-bin /path/to/claude claude-code check</code></pre>
-<h2>Limits</h2>
-<p>Lab Kit is a local control surface, not an entitlement bypass.</p>
-<p>Some controls are only useful when your installed CLI build, account, model, or rollout already supports them. Lab Kit can make local switches easy to inspect and edit; it cannot force a remote service to expose a feature.</p>
-<h2>Repository Map</h2>
+<pre><code class="language-bash">labkit --codex-bin /path/to/codex codex check
+labkit --claude-bin /path/to/claude claude-code check</code></pre>
+<h2>Architecture Notes</h2>
 <ul>
-<li><code>lab-kit</code>: main CLI.</li>
-<li><code>install.sh</code>: installer for the <code>lab-kit</code> executable.</li>
-<li><code>scripts/render_readme.py</code>: local README renderer.</li>
-<li><code>README.html</code>: generated local preview of the README.</li>
-<li><code>README.md</code>: product and usage guide.</li>
+<li><code>labkit</code> is the executable used from source checkouts and installer installs.</li>
+<li><code>lab_kit/cli.py</code> contains the packaged CLI implementation used by the <code>labkit</code> console entry point.</li>
+<li><code>lab_kit/data/codex_feature_metadata.json</code> keeps Codex dynamic registry output readable without making coverage static.</li>
+<li><code>lab_kit/data/claude-code-settings-schema.json</code> is the bundled Claude Code schema snapshot used when no refreshed cache exists.</li>
+<li>Runtime dependencies are intentionally zero; development tools live behind the <code>.[dev]</code> extra.</li>
 </ul>
+<h2>Windows Caveats</h2>
+<p>Lab Kit is Python-based and can run on Windows, but the shell installer is POSIX-oriented. On Windows, prefer <code>python -m pip install -e .</code> from a checkout, run from PowerShell or Windows Terminal, and verify that the <code>codex</code> and <code>claude</code> executables are available on <code>PATH</code>.</p>
+<h2>Testing</h2>
+<p>Run the hermetic E2E suite:</p>
+<pre><code class="language-bash">tests/run_e2e.sh</code></pre>
+<p>Those tests execute the real <code>labkit</code> CLI against isolated temp homes and fake <code>codex</code> / <code>claude</code> binaries. That keeps CI deterministic and prevents tests from editing your real <code>~/.codex</code> or <code>~/.claude</code> files.</p>
+<p>Run optional live smoke tests against real installed binaries:</p>
+<pre><code class="language-bash">LABKIT_LIVE_E2E=1 tests/run_e2e.sh</code></pre>
+<p>Live smoke tests are read-only or dry-run only.</p>
+<h2>Contributing</h2>
+<p>See <a href="CONTRIBUTING.md">CONTRIBUTING.md</a> for local setup, testing, and feature metadata guidance.</p>
+<h2>License</h2>
+<p>Lab Kit CLI is released under the <a href="LICENSE">MIT License</a>.</p>
   </main>
 </body>
 </html>
