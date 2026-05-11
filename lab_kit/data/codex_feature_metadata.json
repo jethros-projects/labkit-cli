@@ -1,0 +1,146 @@
+{
+  "recommended": [
+    "1m-context",
+    "web-search-live",
+    "memories",
+    "goals",
+    "codex-hooks",
+    "external-migration",
+    "prevent-idle-sleep",
+    "terminal-resize-reflow",
+    "apps",
+    "plugins",
+    "tool-suggest",
+    "browser-use",
+    "computer-use",
+    "multi-agent",
+    "fast-mode",
+    "personality",
+    "request-compression",
+    "shell-snapshot",
+    "shell-tool",
+    "unified-exec"
+  ],
+  "features": {
+    "1m-context": {
+      "title": "1M Context",
+      "cluster": "Model & Context",
+      "description": "Configures GPT-5.5 for the large local context profile."
+    },
+    "web-search-live": {
+      "title": "Live Web Search",
+      "cluster": "Model & Context",
+      "description": "Requests live search instead of cached search behavior."
+    },
+    "memories": {
+      "title": "Memories",
+      "cluster": "Memory & Personalization",
+      "description": "Enables the local memory switch when the current build exposes it."
+    },
+    "goals": {
+      "title": "Goals",
+      "cluster": "Workflow",
+      "description": "Tracks a concrete thread objective until the work is complete."
+    },
+    "codex_hooks": {
+      "name": "codex-hooks",
+      "aliases": ["hooks"],
+      "title": "Hooks",
+      "cluster": "Workflow",
+      "description": "Runs local lifecycle hooks when the current build gates them."
+    },
+    "external_migration": {
+      "name": "external-migration",
+      "title": "External Migration",
+      "cluster": "Workflow",
+      "description": "Imports external agent session state where supported."
+    },
+    "prevent_idle_sleep": {
+      "name": "prevent-idle-sleep",
+      "title": "Prevent Idle Sleep",
+      "cluster": "Runtime",
+      "description": "Prevents idle sleep during active work on supported macOS setups."
+    },
+    "terminal_resize_reflow": {
+      "name": "terminal-resize-reflow",
+      "title": "Terminal Resize Reflow",
+      "cluster": "Runtime",
+      "description": "Reflows terminal output more cleanly after width changes."
+    },
+    "apps": {
+      "title": "Connectors",
+      "cluster": "Tools & Integrations",
+      "description": "Shows connector-backed tools and app integrations when available."
+    },
+    "plugins": {
+      "title": "Plugins",
+      "cluster": "Tools & Integrations",
+      "description": "Lets installed plugin bundles contribute skills, tools, and integrations."
+    },
+    "tool_suggest": {
+      "name": "tool-suggest",
+      "title": "Tool Suggest",
+      "cluster": "Tools & Integrations",
+      "description": "Surfaces relevant tools or connectors when a task appears to need them."
+    },
+    "browser_use": {
+      "name": "browser-use",
+      "title": "Browser Use",
+      "cluster": "Tools & Integrations",
+      "description": "Lets agents inspect pages, click flows, and capture UI evidence."
+    },
+    "computer_use": {
+      "name": "computer-use",
+      "title": "Computer Use",
+      "cluster": "Tools & Integrations",
+      "description": "Lets agents drive supported desktop surfaces under the normal permission model."
+    },
+    "multi_agent": {
+      "name": "multi-agent",
+      "title": "Multi-Agent",
+      "cluster": "Agent Runtime",
+      "description": "Lets a main agent delegate bounded work to helper agents."
+    },
+    "fast_mode": {
+      "name": "fast-mode",
+      "title": "Fast Mode",
+      "cluster": "Agent Runtime",
+      "description": "Uses lower-latency routing where available."
+    },
+    "personality": {
+      "title": "Personality",
+      "cluster": "Agent Runtime",
+      "description": "Enables interaction-style controls exposed by the current build."
+    },
+    "enable_request_compression": {
+      "name": "request-compression",
+      "title": "Request Compression",
+      "cluster": "Agent Runtime",
+      "description": "Reduces payload size for larger and tool-heavy turns."
+    },
+    "shell_snapshot": {
+      "name": "shell-snapshot",
+      "title": "Shell Snapshot",
+      "cluster": "Agent Runtime",
+      "description": "Preserves more accurate terminal context across tool calls."
+    },
+    "shell_tool": {
+      "name": "shell-tool",
+      "title": "Shell Tool",
+      "cluster": "Agent Runtime",
+      "description": "Keeps shell execution available when gated by a feature flag."
+    },
+    "unified_exec": {
+      "name": "unified-exec",
+      "title": "Unified Exec",
+      "cluster": "Agent Runtime",
+      "description": "Uses the newer command-execution path for terminal sessions."
+    },
+    "remote_control": {
+      "name": "remote-control",
+      "title": "Remote Control",
+      "cluster": "Workflow",
+      "description": "Exposes remote-control support when the installed Codex CLI build lists it."
+    }
+  }
+}
