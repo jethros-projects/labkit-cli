@@ -1,0 +1,394 @@
+{
+  "defaults": {
+    "control": {
+      "sources": [
+        {
+          "label": "Claude Code settings",
+          "url": "https://code.claude.com/docs/en/settings",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Claude Code JSON Schema",
+          "url": "https://json.schemastore.org/claude-code-settings.json",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "verification": [
+        {
+          "kind": "settings",
+          "label": "Settings file",
+          "detail": "Confirm the selected settings scope contains the value LabKit writes.",
+          "command": "labkit claude-code list --all --json",
+          "automated": true
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "info",
+          "label": "Settings evidence boundary",
+          "detail": "LabKit can verify local settings and schema/docs coverage. It cannot prove account entitlement, provider IAM, managed policy precedence, or live Claude Code runtime behavior without an active Claude Code session."
+        }
+      ]
+    },
+    "setting": {
+      "dependencies": [
+        {
+          "kind": "scope",
+          "label": "Settings precedence",
+          "detail": "Claude Code applies managed policy, CLI arguments, local, project, and user settings with higher-precedence layers able to override lower ones."
+        },
+        {
+          "kind": "fresh-session",
+          "label": "Fresh Claude Code session",
+          "detail": "Start a new Claude Code session after changing settings so the runtime reloads them."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Claude Code status",
+          "detail": "For live proof, inspect the relevant Claude Code slash command such as `/status`, `/config`, `/hooks`, `/mcp`, `/memory`, `/permissions`, `/model`, or `/context`.",
+          "automated": false
+        }
+      ]
+    },
+    "env-setting": {
+      "dependencies": [
+        {
+          "kind": "settings-env",
+          "label": "Session environment",
+          "detail": "Claude Code reads `settings.json` `env` values for Claude Code sessions. MCP child processes need per-server `env` configuration instead of relying on session env inheritance."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Effective environment",
+          "detail": "Use `/status`, provider-specific diagnostics, or a harmless runtime smoke test to prove the environment switch affected the current session.",
+          "automated": false
+        }
+      ]
+    },
+    "schema-setting": {
+      "dependencies": [
+        {
+          "kind": "schema",
+          "label": "Schema-discovered setting",
+          "detail": "This key is present in the fetched or bundled SchemaStore JSON Schema."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Schema can lag",
+          "detail": "Anthropic documents that the published schema is updated periodically and may lag the newest Claude Code settings."
+        },
+        {
+          "severity": "info",
+          "label": "Schema shape, not semantics",
+          "detail": "Schema presence proves key shape, not that your installed Claude Code build or account honors the behavior."
+        }
+      ]
+    },
+    "settings-file": {
+      "dependencies": [
+        {
+          "kind": "observed-setting",
+          "label": "Existing settings key",
+          "detail": "This key was found in the selected settings file but is not curated by LabKit."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Observed only",
+          "detail": "LabKit can preserve and display this setting, but it does not claim docs or schema confirmation."
+        }
+      ]
+    },
+    "manual": {
+      "dependencies": [
+        {
+          "kind": "session-flag",
+          "label": "Explicit session launch",
+          "detail": "This control is activated by a Claude Code command-line flag or launch mode, not by editing settings.json."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "info",
+          "label": "Reference-only",
+          "detail": "LabKit intentionally does not enable or disable session-only controls."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Launch proof",
+          "detail": "Start Claude Code with the documented session flag and confirm the active mode in-session.",
+          "automated": false
+        }
+      ]
+    }
+  },
+  "clusters": {
+    "Memory & Context": {
+      "sources": [
+        {
+          "label": "Claude Code memory",
+          "url": "https://code.claude.com/docs/en/memory",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Claude Code model config",
+          "url": "https://code.claude.com/docs/en/model-config",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Model and plan dependent",
+          "detail": "Context, thinking, and prompt-cache behavior can depend on model family, account plan, provider route, and current Claude Code version."
+        }
+      ]
+    },
+    "Automation": {
+      "sources": [
+        {
+          "label": "Claude Code hooks",
+          "url": "https://code.claude.com/docs/en/hooks",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Hook security",
+          "detail": "Command hooks run with the user's full permissions. Async hooks cannot block tool calls or return decisions after the triggering action has already continued."
+        }
+      ]
+    },
+    "Safety": {
+      "sources": [
+        {
+          "label": "Claude Code permissions",
+          "url": "https://code.claude.com/docs/en/permissions",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Permission limits",
+          "detail": "Read/Edit permission rules do not stop arbitrary subprocesses from reading or writing files. Use sandboxing or OS policy for shell-level isolation."
+        }
+      ]
+    },
+    "Connectivity": {
+      "sources": [
+        {
+          "label": "Claude Code setup",
+          "url": "https://code.claude.com/docs/en/setup",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Claude Code third-party integrations",
+          "url": "https://code.claude.com/docs/en/third-party-integrations",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "network",
+          "label": "Network and provider access",
+          "detail": "Claude Code requires network access for model calls, and provider routes require their provider credentials and quotas."
+        }
+      ]
+    },
+    "Tools & Integrations": {
+      "sources": [
+        {
+          "label": "Claude Code MCP",
+          "url": "https://code.claude.com/docs/en/mcp",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "External tool behavior",
+          "detail": "MCP servers, plugins, browsers, and shell tools may have their own auth, installation, timeout, or policy gates outside LabKit's control."
+        }
+      ]
+    },
+    "IDE": {
+      "sources": [
+        {
+          "label": "Claude Code VS Code",
+          "url": "https://code.claude.com/docs/en/vs-code",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Claude Code JetBrains",
+          "url": "https://code.claude.com/docs/en/jetbrains",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "ide",
+          "label": "Supported IDE integration",
+          "detail": "IDE controls require the matching Claude Code IDE extension/plugin and supported IDE version."
+        }
+      ]
+    },
+    "Privacy & Diagnostics": {
+      "sources": [
+        {
+          "label": "Claude Code data usage",
+          "url": "https://code.claude.com/docs/en/data-usage",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Claude Code monitoring",
+          "url": "https://code.claude.com/docs/en/monitoring-usage",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Network observation needed",
+          "detail": "Local settings can request telemetry or traffic behavior, but proving no packets were sent requires network-level observation."
+        }
+      ]
+    },
+    "Session Flags": {
+      "limitations": [
+        {
+          "severity": "info",
+          "label": "Not persistent",
+          "detail": "These modes are chosen when launching Claude Code and are not durable settings."
+        }
+      ]
+    }
+  },
+  "features": {
+    "1m-context": {
+      "dependencies": [
+        {
+          "kind": "account",
+          "label": "1M context eligibility",
+          "detail": "The active plan, model, and provider route must support 1M context. The setting can only keep the feature visible or opt out."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Cannot prove offline",
+          "detail": "LabKit cannot prove 1M context eligibility from settings alone; use `/context` or runtime session evidence inside Claude Code."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Context command",
+          "detail": "Start a fresh session and inspect `/context` or active model/context output.",
+          "automated": false
+        }
+      ]
+    },
+    "auto-memory": {
+      "dependencies": [
+        {
+          "kind": "version",
+          "label": "Claude Code v2.1.59+",
+          "detail": "Official docs describe auto memory as requiring Claude Code v2.1.59 or newer."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "info",
+          "label": "Local memory only",
+          "detail": "Auto memory is machine-local and memory-file loading has size/line limits documented by Anthropic."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Memory view",
+          "detail": "Use `/memory` in Claude Code to inspect active memory sources.",
+          "automated": false
+        }
+      ]
+    },
+    "hooks": {
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Hooks view",
+          "detail": "Use `/hooks` to inspect configured hook events, matchers, source files, and handlers.",
+          "automated": false
+        }
+      ]
+    },
+    "tool-search": {
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Provider exceptions",
+          "detail": "Official docs note MCP tool search is enabled by default with exceptions for Vertex and non-first-party ANTHROPIC_BASE_URL routes."
+        }
+      ]
+    },
+    "bedrock": {
+      "dependencies": [
+        {
+          "kind": "provider",
+          "label": "Amazon Bedrock credentials",
+          "detail": "Requires CLAUDE_CODE_USE_BEDROCK, AWS_REGION, AWS credentials or AWS_BEARER_TOKEN_BEDROCK, and Bedrock model access."
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code Amazon Bedrock",
+          "url": "https://code.claude.com/docs/en/amazon-bedrock",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "vertex": {
+      "dependencies": [
+        {
+          "kind": "provider",
+          "label": "Google Vertex credentials",
+          "detail": "Requires CLAUDE_CODE_USE_VERTEX, CLOUD_ML_REGION, GCP authentication, and a project through ANTHROPIC_VERTEX_PROJECT_ID or GCP defaults."
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code Google Vertex AI",
+          "url": "https://code.claude.com/docs/en/google-vertex-ai",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    },
+    "foundry": {
+      "dependencies": [
+        {
+          "kind": "provider",
+          "label": "Microsoft Foundry credentials",
+          "detail": "Requires CLAUDE_CODE_USE_FOUNDRY, Azure auth or ANTHROPIC_FOUNDRY_API_KEY, and ANTHROPIC_FOUNDRY_RESOURCE or ANTHROPIC_FOUNDRY_BASE_URL."
+        }
+      ],
+      "sources": [
+        {
+          "label": "Claude Code Microsoft Foundry",
+          "url": "https://code.claude.com/docs/en/microsoft-foundry",
+          "checked_at": "2026-05-11"
+        }
+      ]
+    }
+  }
+}

@@ -1,4 +1,121 @@
 {
+  "defaults": {
+    "control": {
+      "sources": [
+        {
+          "label": "OpenAI Codex config basics",
+          "url": "https://developers.openai.com/codex/config-basic",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "OpenAI Codex feature maturity",
+          "url": "https://developers.openai.com/codex/feature-maturity",
+          "checked_at": "2026-05-11"
+        }
+      ],
+      "verification": [
+        {
+          "kind": "local-state",
+          "label": "LabKit state",
+          "detail": "Use LabKit JSON output to confirm the intended config or registry state.",
+          "command": "labkit codex list --all --json",
+          "automated": true
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "info",
+          "label": "Local evidence boundary",
+          "detail": "LabKit can verify local configuration and the installed Codex registry. It cannot guarantee account, rollout, hosted service, or model-runtime behavior without fresh runtime evidence."
+        }
+      ]
+    },
+    "registry-feature": {
+      "dependencies": [
+        {
+          "kind": "binary",
+          "label": "Installed Codex CLI registry",
+          "detail": "The selected Codex CLI binary must expose this canonical feature key through `codex features list`.",
+          "required_state": "present"
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Maturity label applies",
+          "detail": "Under-development features are not ready for use; experimental features may change or disappear; deprecated and removed keys should not be newly enabled."
+        },
+        {
+          "severity": "warn",
+          "label": "Feature flag only",
+          "detail": "A true flag can unlock a local code path, but it does not install missing plugins, connect accounts, override managed requirements, or bypass server-side entitlement checks."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "registry",
+          "label": "Registry visibility",
+          "detail": "Confirm the installed Codex build still lists the canonical key and the expected maturity stage.",
+          "command": "labkit codex discover --all --json",
+          "automated": true
+        },
+        {
+          "kind": "fresh-session",
+          "label": "Fresh session",
+          "detail": "Start a new Codex session after changing feature flags; existing sessions may have already resolved feature enablement.",
+          "automated": false
+        }
+      ]
+    },
+    "top-setting": {
+      "dependencies": [
+        {
+          "kind": "config",
+          "label": "Codex config layer",
+          "detail": "Codex must load the `~/.codex/config.toml` or trusted project config layer where this setting is written."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "config",
+          "label": "Config value",
+          "detail": "Confirm the selected top-level Codex setting has the intended value.",
+          "command": "labkit codex list --json",
+          "automated": true
+        }
+      ]
+    },
+    "catalog-patch": {
+      "dependencies": [
+        {
+          "kind": "binary",
+          "label": "Codex debug model catalog",
+          "detail": "LabKit must be able to run `codex debug models` to build a local model catalog override."
+        },
+        {
+          "kind": "fresh-session",
+          "label": "Fresh Codex session",
+          "detail": "Codex reads model catalog and context settings when a session starts."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Metadata patch",
+          "detail": "This changes local Codex model metadata and config. It does not grant model access, change your plan, or prove the hosted model accepts the full requested window."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "strict-runtime",
+          "label": "Layered runtime proof",
+          "detail": "Strict verification checks config, local catalog metadata, binary model view, and recent session logs with runtime context-window evidence.",
+          "command": "labkit codex verify --strict --json",
+          "automated": true
+        }
+      ]
+    }
+  },
   "recommended": [
     "1m-context",
     "web-search-live",
@@ -25,12 +142,81 @@
     "1m-context": {
       "title": "1M Context",
       "cluster": "Model & Context",
-      "description": "Configures GPT-5.5 for the large local context profile."
+      "description": "Configures GPT-5.5 for the large local context profile.",
+      "dependencies": [
+        {
+          "kind": "model",
+          "label": "GPT-5.5 catalog entry",
+          "detail": "The selected Codex build must expose a GPT-5.5 model entry that LabKit can patch locally."
+        },
+        {
+          "kind": "account",
+          "label": "Model eligibility",
+          "detail": "Your account and current provider route must actually be allowed to use the selected model and large context."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Effective window reserve",
+          "detail": "Codex can reserve part of the configured context window for runtime safety and UI estimates, so the visible usable context can be lower than 1,000,000 tokens."
+        },
+        {
+          "severity": "blocking",
+          "label": "Disable is manual",
+          "detail": "LabKit does not automatically undo the catalog patch. Restore a backup or remove `model_catalog_json` and related context settings manually."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Session evidence",
+          "detail": "Run a fresh Codex session and then scan recent session logs for `model_context_window` evidence near the expected effective window.",
+          "command": "labkit codex verify --strict",
+          "automated": true
+        }
+      ],
+      "sources": [
+        {
+          "label": "Codex config reference",
+          "url": "https://developers.openai.com/codex/config-reference",
+          "checked_at": "2026-05-11"
+        }
+      ]
     },
     "web-search-live": {
       "title": "Live Web Search",
       "cluster": "Model & Context",
-      "description": "Requests live search instead of cached search behavior."
+      "description": "Requests live search instead of cached search behavior.",
+      "dependencies": [
+        {
+          "kind": "network",
+          "label": "Network access",
+          "detail": "Live search requires the active Codex session policy and sandbox to allow network use."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Untrusted web content",
+          "detail": "OpenAI documents cached mode as reducing exposure to prompt injection from arbitrary live content; live results should still be treated as untrusted."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Transcript evidence",
+          "detail": "Look for `web_search` items in the transcript or `codex exec --json` output when Codex searches.",
+          "automated": false
+        }
+      ],
+      "sources": [
+        {
+          "label": "Codex CLI web search",
+          "url": "https://developers.openai.com/codex/cli/features#web-search",
+          "checked_at": "2026-05-11"
+        }
+      ]
     },
     "memories": {
       "title": "Memories",
@@ -87,19 +273,81 @@
       "name": "browser-use",
       "title": "Browser Use",
       "cluster": "Tools & Integrations",
-      "description": "Lets agents inspect pages, click flows, and capture UI evidence."
+      "description": "Lets agents inspect pages, click flows, and capture UI evidence.",
+      "dependencies": [
+        {
+          "kind": "requirements",
+          "label": "Requirements may gate availability",
+          "detail": "Codex requirements can pin `features.browser_use` false, which disables Browser Use and Browser Agent availability."
+        },
+        {
+          "kind": "tooling",
+          "label": "Browser integration",
+          "detail": "The relevant browser/plugin surface must be installed and usable for a real browser task to succeed."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Availability vs. action",
+          "detail": "Enabling this flag can make the integration available; it does not prove every site, profile, auth, or browser action will work."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "manual-smoke",
+          "label": "Browser smoke test",
+          "detail": "Run a fresh Codex session and ask it to inspect a simple local or public page, then confirm a browser-use transcript/tool event appears.",
+          "automated": false
+        }
+      ]
     },
     "computer_use": {
       "name": "computer-use",
       "title": "Computer Use",
       "cluster": "Tools & Integrations",
-      "description": "Lets agents drive supported desktop surfaces under the normal permission model."
+      "description": "Lets agents drive supported desktop surfaces under the normal permission model.",
+      "dependencies": [
+        {
+          "kind": "requirements",
+          "label": "Requirements may gate availability",
+          "detail": "Codex requirements can pin `features.computer_use` false, which disables Computer Use availability and related install or enablement flows."
+        },
+        {
+          "kind": "platform",
+          "label": "Supported desktop surface",
+          "detail": "The current Codex surface, OS permissions, and desktop automation integration must support computer-use actions."
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "No permission bypass",
+          "detail": "The flag does not bypass Codex approval policy, OS accessibility permissions, or product availability gates."
+        }
+      ],
+      "verification": [
+        {
+          "kind": "manual-smoke",
+          "label": "Desktop smoke test",
+          "detail": "Run a fresh Codex session and perform a harmless supported desktop action, then check transcript/tool evidence.",
+          "automated": false
+        }
+      ]
     },
     "multi_agent": {
       "name": "multi-agent",
       "title": "Multi-Agent",
       "cluster": "Agent Runtime",
-      "description": "Lets a main agent delegate bounded work to helper agents."
+      "description": "Lets a main agent delegate bounded work to helper agents.",
+      "verification": [
+        {
+          "kind": "runtime",
+          "label": "Delegation evidence",
+          "detail": "A real proof requires a session that successfully starts and receives output from a helper agent.",
+          "automated": false
+        }
+      ]
     },
     "fast_mode": {
       "name": "fast-mode",
@@ -141,6 +389,43 @@
       "title": "Remote Control",
       "cluster": "Workflow",
       "description": "Exposes remote-control support when the installed Codex CLI build lists it."
+    },
+    "enable_fanout": {
+      "name": "enable-fanout",
+      "title": "Fanout Agent Jobs",
+      "cluster": "Agent Runtime",
+      "description": "Enables CSV-backed agent job tools when the installed Codex build lists them.",
+      "dependencies": [
+        {
+          "kind": "control",
+          "label": "multi_agent",
+          "detail": "The upstream Codex feature resolver enables `multi_agent` when `enable_fanout` is enabled.",
+          "target": "multi_agent",
+          "required_state": "enabled"
+        }
+      ]
+    },
+    "code_mode_only": {
+      "name": "code-mode-only",
+      "title": "Code Mode Only",
+      "cluster": "Agent Runtime",
+      "description": "Restricts model-visible tools to code-mode entrypoints when the installed Codex build lists it.",
+      "dependencies": [
+        {
+          "kind": "control",
+          "label": "code_mode",
+          "detail": "The upstream Codex feature resolver enables `code_mode` when `code_mode_only` is enabled.",
+          "target": "code_mode",
+          "required_state": "enabled"
+        }
+      ],
+      "limitations": [
+        {
+          "severity": "warn",
+          "label": "Under development",
+          "detail": "Upstream marks this feature under development in current source; do not treat it as production-stable."
+        }
+      ]
     }
   }
 }
