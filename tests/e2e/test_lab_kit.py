@@ -201,6 +201,33 @@ class LabKitE2ETest(unittest.TestCase):
     def codex_config_text(self) -> str:
         return (self.codex_home / "config.toml").read_text(encoding="utf-8")
 
+    def write_codex_1m_override(self) -> Path:
+        catalog = {
+            "models": [
+                {
+                    "slug": "gpt-5.5",
+                    "context_window": 1052632,
+                    "max_context_window": 1052632,
+                    "effective_context_window_percent": 95,
+                }
+            ]
+        }
+        catalog_path = self.codex_home / "model-catalog-1m.json"
+        catalog_path.write_text(json.dumps(catalog) + "\n", encoding="utf-8")
+        (self.codex_home / "config.toml").write_text(
+            "\n".join(
+                [
+                    'model = "gpt-5.5"',
+                    f'model_catalog_json = "{catalog_path}"',
+                    "model_context_window = 1000000",
+                    "model_auto_compact_token_limit = 800000",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return catalog_path
+
     def claude_settings(self, scope: str = "user") -> dict:
         if scope == "user":
             path = self.claude_home / "settings.json"
@@ -351,13 +378,9 @@ class LabKitE2ETest(unittest.TestCase):
     def test_codex_list_json_exposes_polished_titles_and_control_ids(self) -> None:
         data = self.run_json("codex", "list")
         features = {feature["name"]: feature for feature in data["features"]}
-        self.assertEqual(len(data["features"]), 20)
+        self.assertEqual(len(data["features"]), 19)
         self.assertEqual(data["mode"], "recommended")
-        self.assertEqual(features["1m-context"]["title"], "1M Context")
-        self.assertTrue(features["1m-context"]["dependencies"])
-        self.assertTrue(features["1m-context"]["limitations"])
-        self.assertTrue(features["1m-context"]["verification"])
-        self.assertTrue(features["1m-context"]["sources"])
+        self.assertNotIn("1m-context", features)
         self.assertEqual(features["goals"]["status"], "off")
         self.assertEqual(features["goals"]["source"], "default/experimental")
         self.assertEqual(features["codex-hooks"]["status"], "on")
@@ -372,6 +395,10 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertEqual(features["remote-control"]["title"], "Remote Control")
         self.assertTrue(features["remote-control"]["dependencies"])
         self.assertTrue(features["remote-control"]["limitations"])
+        self.assertIn("1m-context", features)
+        self.assertEqual(features["1m-context"]["title"], "Unsupported 1M Context Override")
+        self.assertFalse(features["1m-context"]["selectable"])
+        self.assertTrue(features["1m-context"]["limitations"])
         self.assertNotIn("old-removed", features)
 
     def test_codex_info_explains_dependencies_limitations_and_verification(self) -> None:
@@ -429,8 +456,14 @@ class LabKitE2ETest(unittest.TestCase):
         self.run_json("codex", "disable", "web-search-live")
         self.assertRegex(self.codex_config_text(), r'(?m)^web_search = "cached"$')
 
-    def test_codex_1m_context_patch_writes_catalog_and_runtime_verify_passes(self) -> None:
-        self.run_json("codex", "enable", "1m-context")
+    def test_codex_1m_context_enable_is_blocked_as_unsupported(self) -> None:
+        result = self.run_lab("codex", "enable", "1m-context", "--json", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("reference-only", result.stderr)
+        self.assertFalse((self.codex_home / "config.toml").exists())
+
+    def test_codex_1m_context_override_runtime_verify_passes_when_preexisting(self) -> None:
+        self.write_codex_1m_override()
         text = self.codex_config_text()
         self.assertRegex(text, r'(?m)^model = "gpt-5\.5"$')
         self.assertRegex(text, r"(?m)^model_context_window = 1000000$")
@@ -449,7 +482,7 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertTrue(verify["runtime_evidence"]["ok"])
 
     def test_codex_1m_context_disable_removes_catalog_override(self) -> None:
-        self.run_json("codex", "enable", "1m-context")
+        self.write_codex_1m_override()
         text = self.codex_config_text()
         catalog_path = Path(re.search(r'(?m)^model_catalog_json = "([^"]+)"$', text).group(1))
         self.assertTrue(catalog_path.exists())
@@ -463,7 +496,7 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertFalse(catalog_path.exists())
 
     def test_codex_verify_strict_fails_without_runtime_evidence(self) -> None:
-        self.run_json("codex", "enable", "1m-context")
+        self.write_codex_1m_override()
         result = self.run_lab("codex", "verify", "--strict", "--json", check=False)
         self.assertEqual(result.returncode, 2)
         data = json.loads(result.stdout)
@@ -506,7 +539,6 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertIn("channels", features)
         self.assertNotIn("kairos", features)
         self.assertNotIn("ultraplan", features)
-        self.assertEqual(features["1m-context"]["status"], "on")
         self.assertEqual(features["agent-teams"]["status"], "off")
 
     def test_claude_all_mode_merges_schema_and_settings_keys(self) -> None:

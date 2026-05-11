@@ -117,7 +117,6 @@
     }
   },
   "recommended": [
-    "1m-context",
     "web-search-live",
     "memories",
     "goals",
@@ -140,38 +139,48 @@
   ],
   "features": {
     "1m-context": {
-      "title": "1M Context",
+      "title": "Unsupported 1M Context Override",
       "cluster": "Model & Context",
-      "description": "Configures GPT-5.5 for the large local context profile.",
+      "description": "Documents the old local GPT-5.5 1M catalog override. It is not a proven Codex feature and is hidden from the recommended flow.",
       "dependencies": [
         {
           "kind": "model",
-          "label": "GPT-5.5 catalog entry",
-          "detail": "The selected Codex build must expose a GPT-5.5 model entry that LabKit can patch locally."
+          "label": "Unsupported local catalog override",
+          "detail": "The Codex config keys exist, but changing local model metadata does not prove that the hosted Codex runtime accepts the requested window."
         },
         {
           "kind": "account",
           "label": "Model eligibility",
-          "detail": "Your account and current provider route must actually be allowed to use the selected model and large context."
+          "detail": "Your account, model route, and server-side Codex runtime must actually allow the larger window."
         }
       ],
       "limitations": [
         {
-          "severity": "warn",
-          "label": "Effective window reserve",
-          "detail": "Codex can reserve part of the configured context window for runtime safety and UI estimates, so the visible usable context can be lower than 1,000,000 tokens."
+          "severity": "blocking",
+          "label": "Not the documented GPT-5.5 Codex limit",
+          "detail": "OpenAI's GPT-5.5 launch post documents GPT-5.5 in Codex with a 400K context window, while API GPT-5.5 is the surface described as 1M."
         },
         {
           "severity": "blocking",
-          "label": "Disable is manual",
-          "detail": "LabKit does not automatically undo the catalog patch. Restore a backup or remove `model_catalog_json` and related context settings manually."
+          "label": "Current catalog/runtime mismatch",
+          "detail": "The upstream Codex model catalog currently lists GPT-5.5 at 272K, and local session logs can still report an effective 258,400 window even after local config/catalog overrides."
+        },
+        {
+          "severity": "warn",
+          "label": "Compaction risk",
+          "detail": "Community reports in the official Codex repository show custom `model_context_window` values can make auto-compaction fragile when the configured window and true runtime window diverge."
+        },
+        {
+          "severity": "info",
+          "label": "Disable supported",
+          "detail": "LabKit can remove the old local catalog override with `labkit codex disable 1m-context`."
         }
       ],
       "verification": [
         {
           "kind": "runtime",
           "label": "Session evidence",
-          "detail": "Run a fresh Codex session and then scan recent session logs for `model_context_window` evidence near the expected effective window.",
+          "detail": "Treat the override as unproven unless a fresh Codex session reports `model_context_window` near the expected effective window in session logs.",
           "command": "labkit codex verify --strict",
           "automated": true
         }
@@ -180,6 +189,26 @@
         {
           "label": "Codex config reference",
           "url": "https://developers.openai.com/codex/config-reference",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "OpenAI GPT-5.5 launch post",
+          "url": "https://openai.com/index/introducing-gpt-5-5/",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Upstream Codex model catalog",
+          "url": "https://raw.githubusercontent.com/openai/codex/main/codex-rs/models-manager/models.json",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Codex issue: GPT-5.5 context mismatch",
+          "url": "https://github.com/openai/codex/issues/19409",
+          "checked_at": "2026-05-11"
+        },
+        {
+          "label": "Codex issue: custom context and auto-compaction",
+          "url": "https://github.com/openai/codex/issues/16068",
           "checked_at": "2026-05-11"
         }
       ]
