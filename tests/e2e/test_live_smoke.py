@@ -8,15 +8,14 @@ import sys
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
-LAB_KIT = ROOT / "lab-kit"
+LABKIT = ROOT / "labkit"
 
 
-LIVE_ENABLED = os.environ.get("LAB_KIT_LIVE_E2E") == "1"
+LIVE_ENABLED = os.environ.get("LABKIT_LIVE_E2E") == "1"
 
 
-@unittest.skipUnless(LIVE_ENABLED, "set LAB_KIT_LIVE_E2E=1 to run live smoke tests")
+@unittest.skipUnless(LIVE_ENABLED, "set LABKIT_LIVE_E2E=1 to run live smoke tests")
 class LiveSmokeTest(unittest.TestCase):
     maxDiff = None
 
@@ -24,7 +23,7 @@ class LiveSmokeTest(unittest.TestCase):
         env = os.environ.copy()
         env.update({"NO_COLOR": "1", "COLUMNS": "120"})
         result = subprocess.run(
-            [sys.executable, str(LAB_KIT), *args],
+            [sys.executable, str(LABKIT), *args],
             env=env,
             text=True,
             stdout=subprocess.PIPE,
@@ -34,7 +33,7 @@ class LiveSmokeTest(unittest.TestCase):
         if check and result.returncode != 0:
             self.fail(
                 "command failed\n"
-                f"cmd: {' '.join([sys.executable, str(LAB_KIT), *args])}\n"
+                f"cmd: {' '.join([sys.executable, str(LABKIT), *args])}\n"
                 f"returncode: {result.returncode}\n"
                 f"stdout:\n{result.stdout}\n"
                 f"stderr:\n{result.stderr}"
