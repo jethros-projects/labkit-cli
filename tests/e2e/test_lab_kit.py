@@ -354,6 +354,10 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertEqual(len(data["features"]), 20)
         self.assertEqual(data["mode"], "recommended")
         self.assertEqual(features["1m-context"]["title"], "1M Context")
+        self.assertTrue(features["1m-context"]["dependencies"])
+        self.assertTrue(features["1m-context"]["limitations"])
+        self.assertTrue(features["1m-context"]["verification"])
+        self.assertTrue(features["1m-context"]["sources"])
         self.assertEqual(features["goals"]["status"], "off")
         self.assertEqual(features["goals"]["source"], "default/experimental")
         self.assertEqual(features["codex-hooks"]["status"], "on")
@@ -366,12 +370,30 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertIn("remote-control", features)
         self.assertEqual(features["remote-control"]["key"], "remote_control")
         self.assertEqual(features["remote-control"]["title"], "Remote Control")
+        self.assertTrue(features["remote-control"]["dependencies"])
+        self.assertTrue(features["remote-control"]["limitations"])
         self.assertNotIn("old-removed", features)
+
+    def test_codex_info_explains_dependencies_limitations_and_verification(self) -> None:
+        data = self.run_json("codex", "info", "1m-context")
+        feature = data["feature"]
+        self.assertEqual(feature["name"], "1m-context")
+        self.assertIn("dependencies", feature)
+        self.assertIn("limitations", feature)
+        self.assertIn("verification", feature)
+        self.assertTrue(any(item["kind"] == "strict-runtime" for item in feature["verification"]))
+
+        text = self.run_lab("--no-color", "codex", "list", "--details").stdout
+        self.assertIn("Dependencies", text)
+        self.assertIn("Limitations", text)
+        self.assertIn("Verification", text)
 
     def test_codex_dry_run_does_not_create_config(self) -> None:
         data = self.run_json("codex", "enable", "--dry-run", "goals")
         self.assertTrue(data["dry_run"])
         self.assertFalse(data["changed"])
+        self.assertIn("limitations", data["features"][0])
+        self.assertIn("verification", data["features"][0])
         self.assertFalse((self.codex_home / "config.toml").exists())
 
     def test_codex_enable_feature_writes_config_and_backup(self) -> None:
@@ -456,6 +478,9 @@ class LabKitE2ETest(unittest.TestCase):
         features = {feature["name"]: feature for feature in data["features"]}
         self.assertEqual(features["auto-memory"]["title"], "Auto Memory")
         self.assertEqual(features["auto-memory"]["description"], "Reads and writes project memory between sessions.")
+        self.assertTrue(features["auto-memory"]["dependencies"])
+        self.assertTrue(features["auto-memory"]["limitations"])
+        self.assertTrue(features["auto-memory"]["verification"])
         self.assertEqual(features["1m-context"]["status"], "on")
         self.assertEqual(features["agent-teams"]["status"], "off")
 
@@ -471,8 +496,25 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertEqual(data["mode"], "all")
         self.assertIn("include-co-authored-by", features)
         self.assertEqual(features["include-co-authored-by"]["key"], "includeCoAuthoredBy")
+        self.assertTrue(features["include-co-authored-by"]["dependencies"])
+        self.assertTrue(features["include-co-authored-by"]["limitations"])
         self.assertIn("custom-boolean", features)
+        self.assertTrue(features["custom-boolean"]["limitations"])
         self.assertIn("env-labkit-private-flag", features)
+
+    def test_claude_info_explains_curated_and_schema_controls(self) -> None:
+        curated = self.run_json("claude-code", "info", "auto-memory")
+        self.assertEqual(curated["feature"]["name"], "auto-memory")
+        self.assertTrue(any(item["kind"] == "version" for item in curated["feature"]["dependencies"]))
+
+        schema = self.run_json("claude-code", "info", "include-co-authored-by")
+        self.assertEqual(schema["feature"]["key"], "includeCoAuthoredBy")
+        self.assertTrue(any(item["kind"] == "schema" for item in schema["feature"]["dependencies"]))
+
+        text = self.run_lab("--no-color", "claude-code", "list", "--details").stdout
+        self.assertIn("Dependencies", text)
+        self.assertIn("Limitations", text)
+        self.assertIn("Verification", text)
 
     def test_claude_schema_derived_boolean_can_be_changed(self) -> None:
         self.run_json("claude-code", "enable", "include-co-authored-by")
@@ -495,6 +537,8 @@ class LabKitE2ETest(unittest.TestCase):
         data = self.run_json("claude-code", "enable", "--dry-run", "agent-teams")
         self.assertTrue(data["dry_run"])
         self.assertFalse(data["changed"])
+        self.assertIn("limitations", data["features"][0])
+        self.assertIn("verification", data["features"][0])
         self.assertFalse((self.claude_home / "settings.json").exists())
 
     def test_claude_enable_env_control_writes_settings_and_backup(self) -> None:
