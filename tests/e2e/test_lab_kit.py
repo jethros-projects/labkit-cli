@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -7,14 +8,13 @@ import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
-import textwrap
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
-LAB_KIT = ROOT / "lab-kit"
+LABKIT = ROOT / "labkit"
 INSTALL_SH = ROOT / "install.sh"
 
 
@@ -105,7 +105,7 @@ if __name__ == "__main__":
 '''
 
 
-FAKE_CLAUDE = r'''#!/usr/bin/env python3
+FAKE_CLAUDE = r"""#!/usr/bin/env python3
 from __future__ import annotations
 
 import sys
@@ -121,7 +121,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-'''
+"""
 
 
 def write_executable(path: Path, content: str) -> None:
@@ -137,7 +137,7 @@ class LabKitE2ETest(unittest.TestCase):
     maxDiff = None
 
     def setUp(self) -> None:
-        self.tmp = Path(tempfile.mkdtemp(prefix="lab-kit-e2e."))
+        self.tmp = Path(tempfile.mkdtemp(prefix="labkit-e2e."))
         self.home = self.tmp / "home"
         self.codex_home = self.tmp / "codex-home"
         self.claude_home = self.tmp / "claude-home"
@@ -173,7 +173,7 @@ class LabKitE2ETest(unittest.TestCase):
         check: bool = True,
         env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        command = [sys.executable, str(LAB_KIT), *args]
+        command = [sys.executable, str(LABKIT), *args]
         result = subprocess.run(
             command,
             cwd=str(cwd or self.project),
@@ -194,8 +194,8 @@ class LabKitE2ETest(unittest.TestCase):
             )
         return result
 
-    def run_json(self, *args: str, cwd: Path | None = None, check: bool = True) -> dict:
-        result = self.run_lab(*args, "--json", cwd=cwd, check=check)
+    def run_json(self, *args: str, cwd: Path | None = None, check: bool = True, env: dict[str, str] | None = None) -> dict:
+        result = self.run_lab(*args, "--json", cwd=cwd, check=check, env=env)
         return json.loads(result.stdout)
 
     def codex_config_text(self) -> str:
@@ -229,11 +229,11 @@ class LabKitE2ETest(unittest.TestCase):
 
     def test_top_level_help_is_short_and_namespaced(self) -> None:
         result = self.run_lab("--no-color", "--help")
-        self.assertIn("{codex,claude-code}", result.stdout)
+        self.assertIn("{codex,claude-code,update-features}", result.stdout)
         self.assertIn("codex", result.stdout)
         self.assertIn("claude-code", result.stdout)
         self.assertNotIn("==SUPPRESS==", result.stdout)
-        self.assertNotIn("./lab-kit", result.stdout)
+        self.assertNotIn("./labkit", result.stdout)
 
     def test_enable_help_uses_control_id_metavar_not_choice_wall(self) -> None:
         codex = self.run_lab("--no-color", "codex", "enable", "--help").stdout
@@ -243,13 +243,20 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertNotIn("agent-teams,all-updates", claude)
         self.assertNotIn("1m-context,apps", codex)
 
+    def test_version_flag(self) -> None:
+        result = self.run_lab("--version")
+        self.assertRegex(result.stdout.strip(), r"^labkit \d+\.\d+\.\d+")
+
     def test_installer_uses_global_command_hint_and_installs_executable(self) -> None:
         install_dir = self.tmp / "install-bin"
         profile = self.tmp / "shell-profile"
         env = self.env.copy()
         env["INSTALL_DIR"] = str(install_dir)
-        env["LAB_KIT_PROFILE"] = str(profile)
+        env["LABKIT_PROFILE"] = str(profile)
         env["SHELL"] = "/bin/zsh"
+        legacy = install_dir / "lab-kit"
+        install_dir.mkdir()
+        legacy.write_text("old command\n", encoding="utf-8")
         result = subprocess.run(
             ["sh", str(INSTALL_SH)],
             cwd=str(ROOT),
@@ -260,8 +267,9 @@ class LabKitE2ETest(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        installed = install_dir / "lab-kit"
+        installed = install_dir / "labkit"
         self.assertTrue(installed.exists())
+        self.assertFalse(legacy.exists())
         self.assertTrue(os.access(installed, os.X_OK))
         self.assertIn("is installed, but", result.stdout)
         self.assertIn(f"updated profile: {profile}", result.stdout)
@@ -270,7 +278,7 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertIn("For future terminals", result.stdout)
         self.assertIn("new terminal:", result.stdout)
         profile_text = profile.read_text(encoding="utf-8")
-        self.assertIn("# >>> lab-kit PATH >>>", profile_text)
+        self.assertIn("# >>> labkit PATH >>>", profile_text)
         self.assertIn(str(install_dir), profile_text)
         help_result = subprocess.run(
             [str(installed), "--help"],
@@ -287,7 +295,7 @@ class LabKitE2ETest(unittest.TestCase):
         profile = self.tmp / "plain-shell-profile"
         env = self.env.copy()
         env["INSTALL_DIR"] = str(install_dir)
-        env["LAB_KIT_PROFILE"] = str(profile)
+        env["LABKIT_PROFILE"] = str(profile)
         env["SHELL"] = "/bin/zsh"
         env["NO_COLOR"] = "1"
         result = subprocess.run(
@@ -303,6 +311,35 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertNotIn("\x1b[", result.stdout)
         self.assertIn("current terminal:", result.stdout)
 
+    def test_installer_verifies_pinned_archive_checksum(self) -> None:
+        archive_root = self.tmp / "archive-root" / "labkit-cli-test"
+        archive_root.mkdir(parents=True)
+        shutil.copy2(ROOT / "labkit", archive_root / "labkit")
+        shutil.copytree(ROOT / "lab_kit", archive_root / "lab_kit")
+        archive = self.tmp / "labkit-cli-test.tar.gz"
+        with tarfile.open(archive, "w:gz") as handle:
+            handle.add(archive_root, arcname="labkit-cli-test")
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+
+        install_dir = self.tmp / "archive-install-bin"
+        env = self.env.copy()
+        env["INSTALL_DIR"] = str(install_dir)
+        env["ARCHIVE_URL"] = archive.as_uri()
+        env["LABKIT_SHA256"] = digest
+        env["LABKIT_NO_PATH_UPDATE"] = "1"
+        result = subprocess.run(
+            ["sh", str(INSTALL_SH)],
+            cwd=str(self.tmp),
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("verified SHA256", result.stdout)
+        self.assertTrue((install_dir / "labkit").exists())
+        self.assertTrue((install_dir / "lab_kit" / "cli.py").exists())
+
     def test_codex_check_json_reads_fake_binary_and_isolated_home(self) -> None:
         data = self.run_json("codex", "check")
         self.assertTrue(data["ok"])
@@ -315,10 +352,21 @@ class LabKitE2ETest(unittest.TestCase):
         data = self.run_json("codex", "list")
         features = {feature["name"]: feature for feature in data["features"]}
         self.assertEqual(len(data["features"]), 20)
+        self.assertEqual(data["mode"], "recommended")
         self.assertEqual(features["1m-context"]["title"], "1M Context")
         self.assertEqual(features["goals"]["status"], "off")
         self.assertEqual(features["goals"]["source"], "default/experimental")
         self.assertEqual(features["codex-hooks"]["status"], "on")
+        self.assertNotIn("remote-control", features)
+
+    def test_codex_all_mode_includes_dynamic_registry_controls(self) -> None:
+        data = self.run_json("codex", "list", "--all")
+        features = {feature["name"]: feature for feature in data["features"]}
+        self.assertEqual(data["mode"], "all")
+        self.assertIn("remote-control", features)
+        self.assertEqual(features["remote-control"]["key"], "remote_control")
+        self.assertEqual(features["remote-control"]["title"], "Remote Control")
+        self.assertNotIn("old-removed", features)
 
     def test_codex_dry_run_does_not_create_config(self) -> None:
         data = self.run_json("codex", "enable", "--dry-run", "goals")
@@ -341,6 +389,12 @@ class LabKitE2ETest(unittest.TestCase):
         (self.codex_home / "config.toml").write_text("[features]\ngoals = true\n", encoding="utf-8")
         self.run_json("codex", "disable", "goals")
         self.assertRegex(self.codex_config_text(), r"(?m)^goals = false$")
+
+    def test_codex_enable_and_disable_dynamic_registry_feature(self) -> None:
+        self.run_json("codex", "enable", "remote-control")
+        self.assertRegex(self.codex_config_text(), r"(?m)^remote_control = true$")
+        self.run_json("codex", "disable", "remote_control")
+        self.assertRegex(self.codex_config_text(), r"(?m)^remote_control = false$")
 
     def test_codex_top_level_control_enable_and_disable(self) -> None:
         self.run_json("codex", "enable", "web-search-live")
@@ -397,12 +451,45 @@ class LabKitE2ETest(unittest.TestCase):
     def test_claude_list_json_exposes_full_catalog_and_polished_copy(self) -> None:
         data = self.run_json("claude-code", "list")
         self.assertEqual(len(data["features"]), 119)
+        self.assertEqual(data["mode"], "curated")
         self.assertEqual(sum(1 for feature in data["features"] if feature["selectable"]), 115)
         features = {feature["name"]: feature for feature in data["features"]}
         self.assertEqual(features["auto-memory"]["title"], "Auto Memory")
         self.assertEqual(features["auto-memory"]["description"], "Reads and writes project memory between sessions.")
         self.assertEqual(features["1m-context"]["status"], "on")
         self.assertEqual(features["agent-teams"]["status"], "off")
+
+    def test_claude_all_mode_merges_schema_and_settings_keys(self) -> None:
+        settings = {
+            "includeCoAuthoredBy": False,
+            "customBoolean": True,
+            "env": {"LABKIT_PRIVATE_FLAG": "yes"},
+        }
+        (self.claude_home / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+        data = self.run_json("claude-code", "list", "--all")
+        features = {feature["name"]: feature for feature in data["features"]}
+        self.assertEqual(data["mode"], "all")
+        self.assertIn("include-co-authored-by", features)
+        self.assertEqual(features["include-co-authored-by"]["key"], "includeCoAuthoredBy")
+        self.assertIn("custom-boolean", features)
+        self.assertIn("env-labkit-private-flag", features)
+
+    def test_claude_schema_derived_boolean_can_be_changed(self) -> None:
+        self.run_json("claude-code", "enable", "include-co-authored-by")
+        data = self.claude_settings()
+        self.assertIs(data["includeCoAuthoredBy"], True)
+        self.run_json("claude-code", "disable", "include-co-authored-by")
+        data = self.claude_settings()
+        self.assertIs(data["includeCoAuthoredBy"], False)
+
+    def test_claude_discover_reports_schema_and_settings_extras(self) -> None:
+        (self.claude_home / "settings.json").write_text('{"customBoolean": true}\n', encoding="utf-8")
+        data = self.run_json("claude-code", "discover")
+        names = {feature["name"] for feature in data["features"]}
+        self.assertIn("auto-memory", names)
+        self.assertIn("include-co-authored-by", names)
+        self.assertIn("custom-boolean", names)
+        self.assertIn("customBoolean", data["settings_keys"])
 
     def test_claude_dry_run_does_not_create_settings(self) -> None:
         data = self.run_json("claude-code", "enable", "--dry-run", "agent-teams")
@@ -448,6 +535,30 @@ class LabKitE2ETest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("invalid choice", result.stderr)
 
+    def test_update_features_refreshes_claude_schema_cache(self) -> None:
+        schema = self.tmp / "schema.json"
+        schema.write_text(
+            json.dumps(
+                {
+                    "type": "object",
+                    "properties": {
+                        "env": {"type": "object", "properties": {}},
+                        "newSchemaToggle": {"type": "boolean", "description": "A schema-only toggle."},
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        env = self.env.copy()
+        env["LABKIT_DATA_HOME"] = str(self.tmp / "labkit-data")
+        env["LABKIT_CLAUDE_SCHEMA_URL"] = schema.as_uri()
+        data = self.run_json("update-features", "--skip-codex", env=env)
+        self.assertTrue(data["claude"]["ok"])
+        self.assertTrue((Path(data["claude"]["path"])).exists())
+        listed = self.run_json("claude-code", "list", "--all", env=env)
+        names = {feature["name"] for feature in listed["features"]}
+        self.assertIn("new-schema-toggle", names)
+
     def test_legacy_top_level_codex_alias_still_works_but_is_hidden(self) -> None:
         help_text = self.run_lab("--no-color", "--help").stdout
         self.assertNotIn(" check ", help_text)
@@ -456,11 +567,11 @@ class LabKitE2ETest(unittest.TestCase):
 
     def test_readme_deployed_usage_has_no_local_invocation_or_old_placeholder(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("lab-kit codex select", readme)
-        self.assertIn("lab-kit claude-code select", readme)
-        self.assertNotIn("./lab-kit", readme)
+        self.assertIn("labkit codex select", readme)
+        self.assertIn("labkit claude-code select", readme)
+        self.assertNotIn("./labkit", readme)
         self.assertNotIn("<feature-name>", readme)
-        self.assertNotIn("codex-lab-kit", readme)
+        self.assertNotIn("codex-labkit", readme)
 
 
 if __name__ == "__main__":
