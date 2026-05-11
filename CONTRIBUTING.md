@@ -46,6 +46,8 @@ Codex feature coverage should stay dynamic. Prefer improving `lab_kit/data/codex
 
 Claude Code coverage should stay curated plus schema-driven. Add polished controls to the curated list when Lab Kit can safely enable/disable them. Put docs-backed dependency and verification notes in `lab_kit/data/claude_feature_metadata.json`. Let `labkit claude-code list --all` and `labkit claude-code discover` surface schema-only or settings-file-only keys.
 
+Leaked or research-preview Claude Code features need extra caution. Prefer official docs, SchemaStore, changelog, or live CLI evidence. If a control only appears in public leak analysis, mark it hidden from the default catalog, non-selectable, and reference-only with blocking limitations. Do not add write support for unsafe bypasses, internal employee paths, or names that appear build-gated or server-gated.
+
 When documenting a control, distinguish local verification from runtime proof. Lab Kit can usually prove the file value and upstream key discovery; account entitlements, provider IAM, managed policy precedence, and live tool behavior need a real Codex CLI or Claude Code session.
 
 Refresh local feature knowledge with:
