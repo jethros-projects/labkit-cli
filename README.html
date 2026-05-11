@@ -153,7 +153,7 @@ labkit update-features</code></pre>
 labkit codex verify --strict
 labkit claude-code info auto-memory
 labkit claude-code list --all --json</code></pre>
-<p>For Codex, <code>info</code> combines the live registry with <code>lab_kit/data/codex_feature_metadata.json</code>, including known upstream dependencies such as <code>enable_fanout</code> implying <code>multi_agent</code> and <code>code_mode_only</code> implying <code>code_mode</code>. For the <code>1m-context</code> control, <code>verify --strict</code> checks the config layer, local model catalog, Codex binary model view, and recent session logs.</p>
+<p>For Codex, <code>info</code> combines the live registry with <code>lab_kit/data/codex_feature_metadata.json</code>, including known upstream dependencies such as <code>enable_fanout</code> implying <code>multi_agent</code> and <code>code_mode_only</code> implying <code>code_mode</code>. The old <code>1m-context</code> catalog patch is now hidden from the recommended view and non-selectable: OpenAI documents GPT-5.5 in Codex as a 400K-context surface, while API GPT-5.5 is the documented 1M surface. <code>verify --strict</code> can still inspect existing overrides and recent session logs, and <code>labkit codex disable 1m-context</code> removes the old Lab Kit override.</p>
 <p>For Claude Code, <code>info</code> combines curated metadata, SchemaStore keys, and settings-file discoveries. Lab Kit records where verification stops: it can prove the file value, but account entitlement, provider IAM, managed policy precedence, and live context/model behavior require Claude Code runtime checks such as <code>/status</code>, <code>/context</code>, <code>/memory</code>, <code>/hooks</code>, <code>/mcp</code>, <code>/permissions</code>, or <code>/model</code>.</p>
 <p>For leaked Claude Code controls, <code>info</code> also records known non-working or non-public status. For example, the old <code>--enable-auto-mode</code> flag is marked removed, <code>USER_TYPE=ant</code> is marked as an internal path that should not be treated as locally enabling hidden behavior, and leak-only safety-bypass names are blocking/reference-only.</p>
 <h2>How To Stay Up To Date</h2>
@@ -199,7 +199,7 @@ labkit claude-code enable --dry-run --json &lt;control-id&gt;</code></pre>
 <p>Codex:</p>
 <ul>
 <li><code>~/.codex/config.toml</code></li>
-<li>local model-catalog override used for the <code>1m-context</code> control</li>
+<li>optional local model-catalog override cleanup for old <code>1m-context</code> installs</li>
 <li>recent Codex session logs for runtime verification</li>
 <li><code>~/.local/share/labkit/codex-features.json</code> for optional registry cache</li>
 </ul>

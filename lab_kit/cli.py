@@ -300,11 +300,12 @@ def spinner(label: str | None):
 CURATED_FEATURES: list[Feature] = [
     Feature(
         "1m-context",
-        "1M Context",
+        "Unsupported 1M Context Override",
         "Model & Context",
-        "local patch",
+        "unsupported override",
         "catalog",
-        "Configures GPT-5.5 for the large local context profile.",
+        "Documents the old local catalog patch for GPT-5.5. It is hidden from the recommended flow because current Codex runtime evidence does not prove 1M context support.",
+        selectable=False,
     ),
     Feature(
         "web-search-live",
