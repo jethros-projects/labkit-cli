@@ -53,6 +53,10 @@ class Feature:
     default_enabled: bool | None = None
     selectable: bool = True
     registry_keys: tuple[str, ...] = field(default_factory=tuple)
+    dependencies: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    limitations: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    verification: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    sources: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -513,7 +517,14 @@ def load_codex_metadata() -> dict[str, Any]:
     return package_json("codex_feature_metadata.json")
 
 
-def codex_metadata_entry(metadata: dict[str, Any], key_or_name: str) -> dict[str, Any]:
+def load_claude_metadata() -> dict[str, Any]:
+    return package_json("claude_feature_metadata.json")
+
+
+METADATA_FIELDS = ("dependencies", "limitations", "verification", "sources")
+
+
+def metadata_entry(metadata: dict[str, Any], key_or_name: str) -> dict[str, Any]:
     features = metadata.get("features")
     if not isinstance(features, dict):
         return {}
@@ -529,6 +540,53 @@ def codex_metadata_entry(metadata: dict[str, Any], key_or_name: str) -> dict[str
     return {}
 
 
+def metadata_defaults(metadata: dict[str, Any], *names: str) -> list[dict[str, Any]]:
+    defaults = metadata.get("defaults")
+    if not isinstance(defaults, dict):
+        return []
+    entries: list[dict[str, Any]] = []
+    for name in names:
+        entry = defaults.get(name)
+        if isinstance(entry, dict):
+            entries.append(entry)
+    return entries
+
+
+def metadata_items(value: Any) -> tuple[dict[str, Any], ...]:
+    if not value:
+        return ()
+    values = value if isinstance(value, list) else [value]
+    items: list[dict[str, Any]] = []
+    for item in values:
+        if isinstance(item, dict):
+            items.append(dict(item))
+        elif isinstance(item, str):
+            items.append({"detail": item})
+    return tuple(items)
+
+
+def merge_metadata_items(*groups: tuple[dict[str, Any], ...]) -> tuple[dict[str, Any], ...]:
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for group in groups:
+        for item in group:
+            marker = json.dumps(item, sort_keys=True)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            merged.append(item)
+    return tuple(merged)
+
+
+def with_feature_metadata(feature: Feature, *entries: dict[str, Any]) -> Feature:
+    updates: dict[str, tuple[dict[str, Any], ...]] = {}
+    for field_name in METADATA_FIELDS:
+        existing = getattr(feature, field_name)
+        additions = [metadata_items(entry.get(field_name)) for entry in entries if isinstance(entry, dict)]
+        updates[field_name] = merge_metadata_items(existing, *additions)
+    return replace(feature, **updates)
+
+
 def control_id_from_key(key: str) -> str:
     text = key.replace(".", "-").replace("_", "-")
     text = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", text)
@@ -539,16 +597,25 @@ def title_from_id(name: str) -> str:
     return " ".join(part.upper() if part in {"ui", "api", "mcp"} else part.capitalize() for part in re.split(r"[-_.]+", name))
 
 
+def codex_default_metadata(metadata: dict[str, Any], feature: Feature) -> list[dict[str, Any]]:
+    names = ["control"]
+    if feature.kind == "feature":
+        names.append("registry-feature")
+    elif feature.kind == "catalog":
+        names.append("catalog-patch")
+    elif feature.kind == "top":
+        names.append("top-setting")
+    return metadata_defaults(metadata, *names)
+
+
 def apply_codex_metadata(feature: Feature, metadata: dict[str, Any]) -> Feature:
-    entry = codex_metadata_entry(metadata, feature.key or feature.name) or codex_metadata_entry(metadata, feature.name)
-    if not entry:
-        return feature
+    entry = metadata_entry(metadata, feature.key or feature.name) or metadata_entry(metadata, feature.name)
     aliases = entry.get("aliases") if isinstance(entry.get("aliases"), list) else []
     registry_keys = tuple(str(item) for item in aliases)
     if feature.key:
         registry_keys = (feature.key, *registry_keys)
     registry_keys = (*feature.registry_keys, *tuple(key for key in registry_keys if key not in feature.registry_keys))
-    return replace(
+    feature = replace(
         feature,
         name=str(entry.get("name") or feature.name),
         title=str(entry.get("title") or feature.title),
@@ -556,6 +623,7 @@ def apply_codex_metadata(feature: Feature, metadata: dict[str, Any]) -> Feature:
         description=str(entry.get("description") or feature.description),
         registry_keys=tuple(key for key in registry_keys if key),
     )
+    return with_feature_metadata(feature, *codex_default_metadata(metadata, feature), entry)
 
 
 def codex_curated_features() -> list[Feature]:
@@ -564,9 +632,9 @@ def codex_curated_features() -> list[Feature]:
 
 
 def dynamic_codex_feature(name: str, entry: RegistryEntry, metadata: dict[str, Any]) -> Feature:
-    meta = codex_metadata_entry(metadata, name) or codex_metadata_entry(metadata, control_id_from_key(name))
+    meta = metadata_entry(metadata, name) or metadata_entry(metadata, control_id_from_key(name))
     control_id = str(meta.get("name") or control_id_from_key(name))
-    return Feature(
+    feature = Feature(
         control_id,
         str(meta.get("title") or title_from_id(control_id)),
         str(meta.get("cluster") or "Available Codex Flags"),
@@ -577,6 +645,7 @@ def dynamic_codex_feature(name: str, entry: RegistryEntry, metadata: dict[str, A
         selectable=entry.stage not in {"removed", "deprecated"},
         registry_keys=(name,),
     )
+    return with_feature_metadata(feature, *codex_default_metadata(metadata, feature), meta)
 
 
 def codex_features_from_registry(registry: dict[str, RegistryEntry], *, include_all: bool = False) -> list[Feature]:
@@ -1751,7 +1820,45 @@ def apply_copy_overrides(features: list[Feature], overrides: dict[str, tuple[str
     return polished
 
 
-CLAUDE_FEATURES = apply_copy_overrides(CLAUDE_FEATURES, CLAUDE_COPY_OVERRIDES)
+def claude_default_metadata(metadata: dict[str, Any], feature: Feature) -> list[dict[str, Any]]:
+    names = ["control"]
+    if feature.kind == "manual":
+        names.append("manual")
+    elif feature.kind == "schema_setting":
+        names.append("schema-setting")
+    elif feature.kind == "observed_setting":
+        names.append("settings-file")
+    elif feature.key and feature.key.startswith("env."):
+        names.append("env-setting")
+    else:
+        names.append("setting")
+    return metadata_defaults(metadata, *names)
+
+
+def metadata_cluster_entry(metadata: dict[str, Any], cluster: str) -> dict[str, Any]:
+    clusters = metadata.get("clusters")
+    if not isinstance(clusters, dict):
+        return {}
+    entry = clusters.get(cluster)
+    return entry if isinstance(entry, dict) else {}
+
+
+def apply_claude_metadata(features: list[Feature]) -> list[Feature]:
+    metadata = load_claude_metadata()
+    enriched: list[Feature] = []
+    for feature in features:
+        entry = metadata_entry(metadata, feature.name)
+        if not entry and feature.key:
+            entry = metadata_entry(metadata, feature.key)
+        enriched.append(
+            with_feature_metadata(
+                feature, *claude_default_metadata(metadata, feature), metadata_cluster_entry(metadata, feature.cluster), entry
+            )
+        )
+    return enriched
+
+
+CLAUDE_FEATURES = apply_claude_metadata(apply_copy_overrides(CLAUDE_FEATURES, CLAUDE_COPY_OVERRIDES))
 CLAUDE_FEATURE_BY_NAME = {feature.name: feature for feature in CLAUDE_FEATURES}
 
 
@@ -1865,16 +1972,33 @@ def schema_feature_for_key(key: str, spec: dict[str, Any], *, env: bool = False)
 
 def schema_features(schema: dict[str, Any], curated: list[Feature]) -> list[Feature]:
     known = claude_known_keys(curated)
+    metadata = load_claude_metadata()
     generated: list[Feature] = []
     for key, spec in sorted(schema_properties(schema).items()):
         if key in {"$schema", "env"} or key in known or not isinstance(spec, dict):
             continue
-        generated.append(schema_feature_for_key(key, spec))
+        feature = schema_feature_for_key(key, spec)
+        generated.append(
+            with_feature_metadata(
+                feature,
+                *claude_default_metadata(metadata, feature),
+                *metadata_defaults(metadata, "schema-setting"),
+                metadata_entry(metadata, key),
+            )
+        )
     for key, spec in sorted(schema_env_properties(schema).items()):
         dotted = f"env.{key}"
         if dotted in known or not isinstance(spec, dict):
             continue
-        generated.append(schema_feature_for_key(key, spec, env=True))
+        feature = schema_feature_for_key(key, spec, env=True)
+        generated.append(
+            with_feature_metadata(
+                feature,
+                *claude_default_metadata(metadata, feature),
+                *metadata_defaults(metadata, "schema-setting"),
+                metadata_entry(metadata, dotted),
+            )
+        )
     return generated
 
 
@@ -1890,6 +2014,7 @@ def flatten_settings_keys(data: dict[str, Any], prefix: str = "") -> set[str]:
 
 def settings_only_features(settings: dict[str, Any], known_features: list[Feature]) -> list[Feature]:
     known = claude_known_keys(known_features)
+    metadata = load_claude_metadata()
     features: list[Feature] = []
     for key in sorted(flatten_settings_keys(settings)):
         if key in known or key == "$schema":
@@ -1899,18 +2024,24 @@ def settings_only_features(settings: dict[str, Any], known_features: list[Featur
         actual = get_nested(settings, key)
         name = control_id_from_key(key.replace(".", "-"))
         selectable = isinstance(actual, bool)
+        feature = Feature(
+            name,
+            title_from_id(name),
+            "Settings File",
+            "settings",
+            "claude_bool" if selectable else "observed_setting",
+            f"Present in the selected Claude Code settings file as `{key}` but not curated by Lab Kit.",
+            key=key,
+            value=True if selectable else actual,
+            inactive_value=False if selectable else None,
+            selectable=selectable,
+        )
         features.append(
-            Feature(
-                name,
-                title_from_id(name),
-                "Settings File",
-                "settings",
-                "claude_bool" if selectable else "observed_setting",
-                f"Present in the selected Claude Code settings file as `{key}` but not curated by Lab Kit.",
-                key=key,
-                value=True if selectable else actual,
-                inactive_value=False if selectable else None,
-                selectable=selectable,
+            with_feature_metadata(
+                feature,
+                *claude_default_metadata(metadata, feature),
+                *metadata_defaults(metadata, "settings-file"),
+                metadata_entry(metadata, key),
             )
         )
     return features
@@ -2459,7 +2590,35 @@ def feature_line_prefix(number: int | None, feature: Feature) -> str:
     return "  --"
 
 
-def render_feature(feature: Feature, state: str, source: str, number: int | None = None) -> None:
+def metadata_line(item: dict[str, Any]) -> str:
+    label = str(item.get("label") or item.get("kind") or item.get("type") or "").strip()
+    detail = str(item.get("detail") or item.get("url") or "").strip()
+    if label and detail:
+        return f"{label}: {detail}"
+    return label or detail
+
+
+def render_metadata_items(title: str, items: tuple[dict[str, Any], ...], indent: str = "        ") -> None:
+    if not items:
+        return
+    say(f"{indent}{muted(title)}")
+    for item in items:
+        line = metadata_line(item)
+        if not line:
+            continue
+        command = item.get("command")
+        if command:
+            line = f"{line} ({command})"
+        say_wrapped(f"- {line}", indent=f"{indent}  ")
+
+
+def render_feature_details(feature: Feature, indent: str = "        ") -> None:
+    render_metadata_items("Dependencies", feature.dependencies, indent=indent)
+    render_metadata_items("Limitations", feature.limitations, indent=indent)
+    render_metadata_items("Verification", feature.verification, indent=indent)
+
+
+def render_feature(feature: Feature, state: str, source: str, number: int | None = None, details: bool = False) -> None:
     prefix = feature_line_prefix(number, feature)
     name = pad(strong(feature.title), FEATURE_NAME_WIDTH)
     state_label = pad(state_badge(state), 8)
@@ -2467,6 +2626,8 @@ def render_feature(feature: Feature, state: str, source: str, number: int | None
     type_label = muted(feature.stage)
     say(f"  {muted(prefix)}  {name} {state_label} {source_label} {type_label}")
     say_wrapped(f"{feature.name}: {feature.description}", indent="        ")
+    if details:
+        render_feature_details(feature)
 
 
 def render_feature_catalog(
@@ -2475,6 +2636,7 @@ def render_feature_catalog(
     numbered: bool = False,
     features: list[Feature] | None = None,
     state_getter: Any | None = None,
+    details: bool = False,
 ) -> None:
     number = 1
     state_getter = state_getter or (lambda feature: feature_state(feature, config, registry))
@@ -2484,9 +2646,79 @@ def render_feature_catalog(
         for feature in group:
             state, source = state_getter(feature)
             shown_number = number if numbered else None
-            render_feature(feature, state, source, shown_number)
+            render_feature(feature, state, source, shown_number, details=details)
             if numbered and feature.selectable:
                 number += 1
+
+
+def feature_info_data(feature: Feature, state: str, source: str) -> dict[str, Any]:
+    return {
+        "name": feature.name,
+        "title": feature.title,
+        "cluster": feature.cluster,
+        "stage": feature.stage,
+        "kind": feature.kind,
+        "selectable": feature.selectable,
+        "status": state,
+        "source": source,
+        "description": feature.description,
+        "key": feature.key,
+        "value": feature.value,
+        "inactive_value": feature.inactive_value,
+        "registry_keys": list(feature.registry_keys),
+        "dependencies": list(feature.dependencies),
+        "limitations": list(feature.limitations),
+        "verification": list(feature.verification),
+        "sources": list(feature.sources),
+    }
+
+
+def render_feature_info(feature: Feature, state: str, source: str) -> None:
+    banner(feature.title)
+    kv("control id", feature.name)
+    if feature.key:
+        kv("writes", feature.key)
+    if feature.registry_keys:
+        kv("registry keys", ", ".join(feature.registry_keys))
+    kv("state", f"{state} from {source}")
+    kv("stage", feature.stage)
+    say("")
+    say_wrapped(feature.description, indent="  ")
+
+    section("Dependencies")
+    if feature.dependencies:
+        for item in feature.dependencies:
+            say_wrapped(f"- {metadata_line(item)}", indent="  ")
+    else:
+        status_line("info", "No extra dependencies recorded", "Lab Kit only knows the control surface")
+
+    section("Limitations")
+    if feature.limitations:
+        for item in feature.limitations:
+            say_wrapped(f"- {metadata_line(item)}", indent="  ")
+    else:
+        status_line("info", "No specific limitations recorded")
+
+    section("Verification")
+    if feature.verification:
+        for item in feature.verification:
+            line = metadata_line(item)
+            if item.get("command"):
+                line = f"{line} ({item['command']})"
+            say_wrapped(f"- {line}", indent="  ")
+    else:
+        status_line("warn", "No automated verification recorded")
+
+    if feature.sources:
+        section("Sources")
+        for item in feature.sources:
+            label = str(item.get("label") or item.get("type") or "source")
+            url = item.get("url")
+            checked = item.get("checked_at")
+            detail = f"{url}" if url else metadata_line(item)
+            if checked:
+                detail = f"{detail} (checked {checked})"
+            kv(label, detail)
 
 
 def render_binary_report(report: BinaryReport, configured_window: int | None) -> None:
@@ -2544,6 +2776,11 @@ def feature_data(feature: Feature, config: dict[str, Any], registry: dict[str, R
         "description": feature.description,
         "key": feature.key,
         "value": feature.value,
+        "inactive_value": feature.inactive_value,
+        "dependencies": list(feature.dependencies),
+        "limitations": list(feature.limitations),
+        "verification": list(feature.verification),
+        "sources": list(feature.sources),
     }
 
 
@@ -2582,6 +2819,10 @@ def feature_catalog_data_for(features: list[Feature], state_getter: Any) -> list
                 "key": feature.key,
                 "value": feature.value,
                 "inactive_value": feature.inactive_value,
+                "dependencies": list(feature.dependencies),
+                "limitations": list(feature.limitations),
+                "verification": list(feature.verification),
+                "sources": list(feature.sources),
             }
         )
         if feature.selectable:
@@ -2760,7 +3001,22 @@ def cmd_list(args: argparse.Namespace) -> None:
     banner("Codex controls. Read-only view; nothing changes from this command.")
     if not include_all:
         status_line("info", "Recommended view", "use `labkit codex list --all` to include every current registry flag")
-    render_feature_catalog(config, registry, numbered=True, features=features)
+    render_feature_catalog(config, registry, numbered=True, features=features, details=bool(getattr(args, "details", False)))
+
+
+def cmd_info(args: argparse.Namespace) -> None:
+    paths = resolve_paths()
+    config = parse_toml_light(read_config(paths))
+    cli_report = inspect_binary("Codex CLI", optional_codex_bin(args.codex_bin))
+    registry = codex_registry_with_cache(cli_report)
+    feature = codex_feature_lookup(args.feature, registry)
+    if not feature:
+        die(f"Unknown control: {args.feature}. Run `labkit codex list --all`.")
+    state, source = feature_state(feature, config, registry)
+    if JSON_OUTPUT:
+        emit_json({"command": "codex info", "source": binary_report_data(cli_report), "feature": feature_info_data(feature, state, source)})
+        return
+    render_feature_info(feature, state, source)
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -3190,6 +3446,9 @@ def apply_feature_changes(
                         "target_state": "active" if change.enabled else "inactive",
                         "current_state": change.current_state,
                         "current_source": change.current_source,
+                        "dependencies": list(change.feature.dependencies),
+                        "limitations": list(change.feature.limitations),
+                        "verification": list(change.feature.verification),
                     }
                     for change in changes
                 ],
@@ -3235,6 +3494,10 @@ def apply_feature_changes(
             detail = f"was {change.current_state}, target {'active' if change.enabled else 'inactive'}"
         status_line(tone, label, detail)
         say_wrapped(change.feature.description, indent="    ")
+        if change.feature.limitations:
+            render_metadata_items("Limitations", change.feature.limitations, indent="    ")
+        if change.feature.verification:
+            render_metadata_items("Verify after change", change.feature.verification, indent="    ")
 
     section("Next")
     status_line("warn", "Start a fresh Codex CLI session", "new sessions pick up config changes")
@@ -3274,6 +3537,9 @@ def apply_claude_feature_changes(
                         "target_state": "active" if change.enabled else "inactive",
                         "current_state": change.current_state,
                         "current_source": change.current_source,
+                        "dependencies": list(change.feature.dependencies),
+                        "limitations": list(change.feature.limitations),
+                        "verification": list(change.feature.verification),
                     }
                     for change in changes
                 ],
@@ -3309,6 +3575,10 @@ def apply_claude_feature_changes(
             detail = f"was {change.current_state}, target {'active' if change.enabled else 'inactive'}"
         status_line("info" if dry_run else "ok", label, detail)
         say_wrapped(change.feature.description, indent="    ")
+        if change.feature.limitations:
+            render_metadata_items("Limitations", change.feature.limitations, indent="    ")
+        if change.feature.verification:
+            render_metadata_items("Verify after change", change.feature.verification, indent="    ")
     section("Next")
     status_line("warn", "Start a fresh Claude Code session", "new sessions pick up settings changes")
 
@@ -3416,6 +3686,10 @@ def cmd_codex_check(args: argparse.Namespace) -> None:
 
 def cmd_codex_list(args: argparse.Namespace) -> None:
     return cmd_list(args)
+
+
+def cmd_codex_info(args: argparse.Namespace) -> None:
+    return cmd_info(args)
 
 
 def cmd_codex_status(args: argparse.Namespace) -> None:
@@ -3559,7 +3833,29 @@ def cmd_claude_code_list(args: argparse.Namespace) -> None:
     banner("Documented Claude Code controls. Read-only view; nothing changes from this command.")
     if not include_all:
         status_line("info", "Curated view", "use `labkit claude-code list --all` to include schema and settings-file keys")
-    render_feature_catalog({}, {}, numbered=True, features=catalog, state_getter=state_getter)
+    render_feature_catalog(
+        {}, {}, numbered=True, features=catalog, state_getter=state_getter, details=bool(getattr(args, "details", False))
+    )
+
+
+def cmd_claude_code_info(args: argparse.Namespace) -> None:
+    paths = resolve_claude_paths(args.scope)
+    settings = read_json_file(paths.settings)
+    feature = claude_feature_lookup(args.feature, settings)
+    if not feature:
+        die(f"Unknown control: {args.feature}. Run `labkit claude-code list --all`.")
+    state, source = claude_feature_state(feature, settings)
+    if JSON_OUTPUT:
+        emit_json(
+            {
+                "command": "claude-code info",
+                "scope": paths.scope,
+                "settings": str(paths.settings),
+                "feature": feature_info_data(feature, state, source),
+            }
+        )
+        return
+    render_feature_info(feature, state, source)
 
 
 def cmd_claude_code_discover(args: argparse.Namespace) -> None:
@@ -3699,6 +3995,10 @@ def cmd_claude_list(args: argparse.Namespace) -> None:
     return cmd_claude_code_list(args)
 
 
+def cmd_claude_info(args: argparse.Namespace) -> None:
+    return cmd_claude_code_info(args)
+
+
 def cmd_claude_select(args: argparse.Namespace) -> None:
     return cmd_claude_code_select(args)
 
@@ -3752,7 +4052,7 @@ def build_parser() -> argparse.ArgumentParser:
         codex_subparsers = parent.add_subparsers(
             dest="codex_command",
             required=True,
-            metavar="{check,list,discover,select,enable,disable,verify}",
+            metavar="{check,list,info,discover,select,enable,disable,verify}",
         )
         c_check = command_parser(codex_subparsers, "check", help="Check Codex CLI installation and state.")
         add_json(c_check)
@@ -3762,8 +4062,14 @@ def build_parser() -> argparse.ArgumentParser:
         c_doctor.set_defaults(func=cmd_codex_check)
         c_list = command_parser(codex_subparsers, "list", help="Show Codex controls grouped by area.")
         c_list.add_argument("--all", action="store_true", help="Include every available registry flag, not just recommended controls.")
+        c_list.add_argument("--details", action="store_true", help="Show dependencies, limitations, and verification notes inline.")
         add_json(c_list)
         c_list.set_defaults(func=cmd_codex_list)
+        c_info = command_parser(codex_subparsers, "info", help="Explain one Codex control's dependencies and verification.")
+        add_json(c_info)
+        c_info.add_argument("feature", metavar="control-id")
+        c_info._positionals.title = "Arguments"
+        c_info.set_defaults(func=cmd_codex_info)
         c_status = command_parser(codex_subparsers, "status", help=argparse.SUPPRESS)
         add_json(c_status)
         c_status.set_defaults(func=cmd_codex_status)
@@ -3800,7 +4106,7 @@ def build_parser() -> argparse.ArgumentParser:
         claude_subparsers = parent.add_subparsers(
             dest=f"{alias.replace('-', '_')}_command",
             required=True,
-            metavar="{check,list,discover,select,enable,disable}",
+            metavar="{check,list,info,discover,select,enable,disable}",
         )
 
         def add_claude_scope(parser_: argparse.ArgumentParser) -> None:
@@ -3815,8 +4121,15 @@ def build_parser() -> argparse.ArgumentParser:
         cc_list = command_parser(claude_subparsers, "list", help="Show documented Claude Code controls.")
         add_claude_scope(cc_list)
         cc_list.add_argument("--all", action="store_true", help="Include official schema keys and settings-file discoveries.")
+        cc_list.add_argument("--details", action="store_true", help="Show dependencies, limitations, and verification notes inline.")
         add_json(cc_list)
         cc_list.set_defaults(func=cmd_claude_code_list if alias == "claude-code" else cmd_claude_list)
+        cc_info = command_parser(claude_subparsers, "info", help="Explain one Claude Code control's dependencies and verification.")
+        add_claude_scope(cc_info)
+        add_json(cc_info)
+        cc_info.add_argument("feature", metavar="control-id")
+        cc_info._positionals.title = "Arguments"
+        cc_info.set_defaults(func=cmd_claude_code_info if alias == "claude-code" else cmd_claude_info)
         cc_discover = command_parser(claude_subparsers, "discover", help="Show curated, schema, and settings-file Claude Code keys.")
         add_claude_scope(cc_discover)
         add_json(cc_discover)
@@ -3858,8 +4171,14 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.set_defaults(func=cmd_check)
     list_parser = command_parser(subparsers, "list", help=argparse.SUPPRESS)
     list_parser.add_argument("--all", action="store_true", help="Include every available registry flag, not just recommended controls.")
+    list_parser.add_argument("--details", action="store_true", help="Show dependencies, limitations, and verification notes inline.")
     add_json(list_parser)
     list_parser.set_defaults(func=cmd_list)
+    info = command_parser(subparsers, "info", help=argparse.SUPPRESS)
+    add_json(info)
+    info.add_argument("feature", metavar="control-id")
+    info._positionals.title = "Arguments"
+    info.set_defaults(func=cmd_info)
     status = command_parser(subparsers, "status", help=argparse.SUPPRESS)
     add_json(status)
     status.set_defaults(func=cmd_status)

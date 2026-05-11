@@ -42,9 +42,11 @@ shellcheck install.sh tests/run_e2e.sh
 
 ## Feature Coverage
 
-Codex feature coverage should stay dynamic. Prefer improving `lab_kit/data/codex_feature_metadata.json` for titles, descriptions, and grouping instead of adding new hardcoded behavior for normal registry flags.
+Codex feature coverage should stay dynamic. Prefer improving `lab_kit/data/codex_feature_metadata.json` for titles, descriptions, grouping, dependencies, limitations, verification steps, and source links instead of adding new hardcoded behavior for normal registry flags.
 
-Claude Code coverage should stay curated plus schema-driven. Add polished controls to the curated list when Lab Kit can safely enable/disable them. Let `labkit claude-code list --all` and `labkit claude-code discover` surface schema-only or settings-file-only keys.
+Claude Code coverage should stay curated plus schema-driven. Add polished controls to the curated list when Lab Kit can safely enable/disable them. Put docs-backed dependency and verification notes in `lab_kit/data/claude_feature_metadata.json`. Let `labkit claude-code list --all` and `labkit claude-code discover` surface schema-only or settings-file-only keys.
+
+When documenting a control, distinguish local verification from runtime proof. Lab Kit can usually prove the file value and upstream key discovery; account entitlements, provider IAM, managed policy precedence, and live tool behavior need a real Codex CLI or Claude Code session.
 
 Refresh local feature knowledge with:
 
