@@ -2631,6 +2631,15 @@ def set_top_level(text: str, values: dict[str, Any]) -> str:
     return "".join(output)
 
 
+def remove_top_level_keys(text: str, keys: set[str]) -> str:
+    lines = text.splitlines(keepends=True)
+    first_table = next((i for i, line in enumerate(lines) if re.match(r"^\s*\[", line)), len(lines))
+    top, rest = lines[:first_table], lines[first_table:]
+    assignment = re.compile(r"^\s*([A-Za-z0-9_.-]+)\s*=")
+    kept = [line for line in top if not (assignment.match(line) and assignment.match(line).group(1) in keys)]
+    return "".join(kept + rest)
+
+
 def set_table_values(text: str, table: str, values: dict[str, Any]) -> str:
     lines = text.splitlines(keepends=True)
     header_re = re.compile(r"^\s*\[" + re.escape(table) + r"\]\s*(?:#.*)?$")
@@ -2740,12 +2749,32 @@ def patch_gpt55_context(paths: Paths, codex_bin: Path) -> None:
     write_config(paths, config)
 
 
+def same_path(left: Path, right: Path) -> bool:
+    try:
+        return left.expanduser().resolve() == right.expanduser().resolve()
+    except OSError:
+        return left.expanduser() == right.expanduser()
+
+
+def unpatch_gpt55_context(paths: Paths) -> None:
+    current = parse_toml_light(read_config(paths))
+    catalog_value = current.get("model_catalog_json")
+    config = remove_top_level_keys(
+        read_config(paths),
+        {"model_catalog_json", "model_context_window", "model_auto_compact_token_limit"},
+    )
+    write_config(paths, config)
+    if isinstance(catalog_value, str) and same_path(Path(catalog_value), paths.catalog) and paths.catalog.exists():
+        paths.catalog.unlink()
+
+
 def apply_feature(feature: Feature, paths: Paths, codex_bin: Path | None, enabled: bool) -> None:
     if feature.kind == "manual":
         die(f"{feature.name} is reference-only and cannot be changed by this CLI.")
     if feature.kind == "catalog":
         if not enabled:
-            die("Disabling 1m-context is not automated. Restore a backup or remove model_catalog_json manually.")
+            unpatch_gpt55_context(paths)
+            return
         if codex_bin is None:
             die("1m-context needs a Codex CLI binary so Lab Kit can read the model catalog.")
         patch_gpt55_context(paths, codex_bin)
@@ -3430,11 +3459,13 @@ def target_enabled_from_text(text: str) -> str:
     return aliases[target]
 
 
+def state_is_active(state: str) -> bool:
+    return state in {"on", "partial"}
+
+
 def validate_feature_change(change: FeatureChange) -> None:
     if change.feature.kind == "manual":
         die(f"{change.feature.name} is reference-only and cannot be changed by this CLI.")
-    if not change.enabled and change.feature.kind == "catalog":
-        die(f"{change.feature.name} cannot be made inactive automatically. Restore a backup or remove model_catalog_json manually.")
 
 
 def validate_claude_feature_change(change: FeatureChange) -> None:
@@ -3455,7 +3486,7 @@ def planned_changes_for_target(
     validator = validator or validate_feature_change
     for feature in features:
         state, source = state_getter(feature)
-        enabled = state != "on" if target == "toggle" else target == "active"
+        enabled = not state_is_active(state) if target == "toggle" else target == "active"
         change = FeatureChange(feature=feature, enabled=enabled, current_state=state, current_source=source)
         validator(change)
         changes.append(change)
@@ -3463,7 +3494,7 @@ def planned_changes_for_target(
 
 
 def preview_enabled_for_state(state: str, target: str) -> bool:
-    return state != "on" if target == "toggle" else target == "active"
+    return not state_is_active(state) if target == "toggle" else target == "active"
 
 
 def run_selection_tui(
@@ -3522,8 +3553,8 @@ def run_selection_tui(
             curses.init_pair(8, curses.COLOR_BLACK, curses.COLOR_WHITE)
 
         cursor = item_indexes[0]
-        selected: set[str] = set()
-        target = "active"
+        current_enabled = {feature.name: state_is_active(states[feature.name][0]) for feature in features}
+        desired_enabled = dict(current_enabled)
         top = 0
         notice = ""
 
@@ -3537,7 +3568,6 @@ def run_selection_tui(
             if cursor >= top + visible_height:
                 top = cursor - visible_height + 1
 
-            target_line = f"Target: {'[active]' if target == 'active' else ' active '}  {'[inactive]' if target == 'inactive' else ' inactive '}  {'[toggle]' if target == 'toggle' else ' toggle '}"
             accent_attr = curses.color_pair(1) if curses.has_colors() else curses.A_BOLD
             active_attr = curses.color_pair(3) if curses.has_colors() else curses.A_BOLD
             inactive_attr = curses.color_pair(4) if curses.has_colors() else curses.A_BOLD
@@ -3546,8 +3576,8 @@ def run_selection_tui(
             cursor_attr = curses.color_pair(8) if curses.has_colors() else curses.A_REVERSE
 
             draw_text(stdscr, 0, 0, APP_NAME, curses.A_BOLD | accent_attr)
-            draw_text(stdscr, 1, 0, "Space selects. a active, i inactive, t toggle. Enter applies. q cancels.")
-            draw_text(stdscr, 2, 0, target_line, accent_attr)
+            draw_text(stdscr, 1, 0, "Space toggles a control on/off. a marks active, i/d marks inactive. Enter applies. q cancels.")
+            draw_text(stdscr, 2, 0, "Checked = active. Unchecked = inactive. Only changed rows are written.", accent_attr)
             draw_text(stdscr, 3, 0, "-" * max(0, width - 1))
 
             for screen_y, row_index in enumerate(range(top, min(len(rows), top + visible_height)), start=4):
@@ -3558,13 +3588,13 @@ def run_selection_tui(
 
                 assert feature is not None
                 state, source = states[feature.name]
-                checked = feature.name in selected
-                enabled = preview_enabled_for_state(state, target)
-                change = f" -> {'active' if enabled else 'inactive'}" if checked else ""
+                checked = desired_enabled[feature.name]
+                current = current_enabled[feature.name]
+                change = f" -> {'active' if checked else 'inactive'}" if checked != current else ""
                 marker = "[x]" if checked else "[ ]"
                 pointer = ">" if row_index == cursor else " "
                 base_attr = cursor_attr if row_index == cursor else 0
-                if checked and row_index != cursor:
+                if checked != current and row_index != cursor:
                     base_attr |= accent_attr
                 draw_text(stdscr, screen_y, 0, f"{pointer} {marker} ", base_attr)
                 draw_text(stdscr, screen_y, 8, f"{state:<7}", active_attr if state == "on" else inactive_attr)
@@ -3574,13 +3604,13 @@ def run_selection_tui(
                     draw_text(stdscr, screen_y, min(96, width - 1), source, muted_attr)
 
             footer_y = height - 2
-            selected_count = len(selected)
-            draw_text(stdscr, footer_y, 0, f"{selected_count} selected")
+            changed_count = sum(1 for feature in features if desired_enabled[feature.name] != current_enabled[feature.name])
+            draw_text(stdscr, footer_y, 0, f"{changed_count} pending change{'s' if changed_count != 1 else ''}")
             if notice:
                 attr = curses.color_pair(5) if curses.has_colors() else curses.A_BOLD
                 draw_text(stdscr, footer_y + 1, 0, notice, attr)
             else:
-                draw_text(stdscr, footer_y + 1, 0, "Tip: select active and inactive rows together, then use toggle.")
+                draw_text(stdscr, footer_y + 1, 0, "Tip: turn an enabled row off by moving to it and pressing Space.")
 
             key = stdscr.getch()
             notice = ""
@@ -3593,29 +3623,35 @@ def run_selection_tui(
                 cursor = next_item(cursor, 1)
                 continue
             if key in (ord("a"), ord("A")):
-                target = "active"
+                feature = rows[cursor][2]
+                assert feature is not None
+                desired_enabled[feature.name] = True
                 continue
             if key in (ord("i"), ord("I"), ord("d"), ord("D")):
-                target = "inactive"
+                feature = rows[cursor][2]
+                assert feature is not None
+                desired_enabled[feature.name] = False
                 continue
             if key in (ord("t"), ord("T")):
-                target = "toggle"
+                feature = rows[cursor][2]
+                assert feature is not None
+                desired_enabled[feature.name] = not desired_enabled[feature.name]
                 continue
             if key == ord(" "):
                 feature = rows[cursor][2]
                 assert feature is not None
-                if feature.name in selected:
-                    selected.remove(feature.name)
-                else:
-                    selected.add(feature.name)
+                desired_enabled[feature.name] = not desired_enabled[feature.name]
                 continue
             if key in (10, 13, curses.KEY_ENTER):
-                if not selected:
-                    notice = "Select at least one feature first."
+                changed = [feature for feature in features if desired_enabled[feature.name] != current_enabled[feature.name]]
+                if not changed:
+                    notice = "No changes to apply."
                     continue
-                chosen = [feature for feature in features if feature.name in selected]
+                changes: list[FeatureChange] = []
                 try:
-                    return planner(chosen, target)
+                    for feature in changed:
+                        changes.extend(planner([feature], "active" if desired_enabled[feature.name] else "inactive"))
+                    return changes
                 except CliError as exc:
                     notice = str(exc)
                     continue
@@ -3880,7 +3916,7 @@ def cmd_disable(args: argparse.Namespace) -> None:
         feature = codex_feature_lookup(name, registry)
         if not feature:
             die(f"Unknown control: {name}. Run `labkit codex list`.")
-        if feature.kind in {"catalog", "manual"}:
+        if feature.kind == "manual":
             die(f"{feature.name} cannot be disabled automatically by this CLI.")
         features.append(feature)
 
